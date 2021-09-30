@@ -700,7 +700,7 @@ Void TDecCavlc::parseSPS(TComSPS* pcSPS)
   
   if (pcSPS->getPTL()->getGeneralPTL()->getLevelIdc() >= Level::LEVEL5)
   {
-    //assert(log2MinCUSize + pcSPS->getLog2DiffMaxMinCodingBlockSize() >= 5);
+    assert(log2MinCUSize + pcSPS->getLog2DiffMaxMinCodingBlockSize() >= 5);
   }
   
   Int maxCUDepthDelta = uiCode;

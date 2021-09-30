@@ -40,9 +40,6 @@
 #include "TComPic.h"
 #include "TComTU.h"
 
-#include<fstream>
-ofstream test("best.txt");
-
 //! \ingroup TLibCommon
 //! \{
 
@@ -472,18 +469,6 @@ Void TComPrediction::predIntraAng( const ComponentID compID, UInt uiDirMode, Pel
       }
     }
   }
-
-  if (iWidth == 8)
-  {
-	  for (int i = 0; i < 8; i++)
-	  {
-		  for (int j = 0; j < 8; j++)
-		  {
-			  //test << pDst[i*uiStride + j] << endl;
-		  }
-	  }
-  }
-	
 
 }
 

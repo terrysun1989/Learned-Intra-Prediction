@@ -40,6 +40,8 @@
 #include <time.h>
 #include "TAppDecTop.h"
 
+ofstream decodeTime("decodeTime.txt", ios::app);
+
 //! \ingroup TAppDecoder
 //! \{
 
@@ -87,6 +89,8 @@ int main(int argc, char* argv[])
   // ending time
   dResult = (Double)(clock()-lBefore) / CLOCKS_PER_SEC;
   printf("\n Total Time: %12.3f sec.\n", dResult);
+
+  decodeTime << dResult << endl;
 
   // destroy application decoder class
   cTAppDecTop.destroy();

@@ -1063,8 +1063,6 @@ const TComDataCU* TComDataCU::getPUAbove( UInt& uiAPartUnitIdx,
   UInt uiAbsZorderCUIdx   = g_auiZscanToRaster[m_absZIdxInCtu];
   const UInt numPartInCtuWidth = m_pcPic->getNumPartInCtuWidth();
 
-
-
   if ( !RasterAddress::isZeroRow( uiAbsPartIdx, numPartInCtuWidth ) )
   {
     uiAPartUnitIdx = g_auiRasterToZscan[ uiAbsPartIdx - numPartInCtuWidth ];
@@ -1095,23 +1093,23 @@ const TComDataCU* TComDataCU::getPUAbove( UInt& uiAPartUnitIdx,
 
 const TComDataCU* TComDataCU::getPUAboveLeft( UInt& uiALPartUnitIdx, UInt uiCurrPartUnitIdx, Bool bEnforceSliceRestriction ) const
 {
-  UInt uiAbsPartIdx       = g_auiZscanToRaster[uiCurrPartUnitIdx]; //tu in ctu
-  UInt uiAbsZorderCUIdx   = g_auiZscanToRaster[m_absZIdxInCtu]; //cu in ctu
+  UInt uiAbsPartIdx       = g_auiZscanToRaster[uiCurrPartUnitIdx];
+  UInt uiAbsZorderCUIdx   = g_auiZscanToRaster[m_absZIdxInCtu];
   const UInt numPartInCtuWidth = m_pcPic->getNumPartInCtuWidth();
 
-  if ( !RasterAddress::isZeroCol( uiAbsPartIdx, numPartInCtuWidth ) ) //tu is at first column of the current ctu, or not
+  if ( !RasterAddress::isZeroCol( uiAbsPartIdx, numPartInCtuWidth ) )
   {
-    if ( !RasterAddress::isZeroRow( uiAbsPartIdx, numPartInCtuWidth ) ) //tu is at first row of the current ctu, or not
+    if ( !RasterAddress::isZeroRow( uiAbsPartIdx, numPartInCtuWidth ) )
     {
       uiALPartUnitIdx = g_auiRasterToZscan[ uiAbsPartIdx - numPartInCtuWidth - 1 ];
-      if ( RasterAddress::isEqualRowOrCol( uiAbsPartIdx, uiAbsZorderCUIdx, numPartInCtuWidth ) ) //when tu in ctu is equal to cu in ctu
+      if ( RasterAddress::isEqualRowOrCol( uiAbsPartIdx, uiAbsZorderCUIdx, numPartInCtuWidth ) )
       {
-        return m_pcPic->getCtu( getCtuRsAddr() ); //return this current ctu
+        return m_pcPic->getCtu( getCtuRsAddr() );
       }
       else
-	  {
+      {
         uiALPartUnitIdx -= m_absZIdxInCtu;
-        return this; //return this current cu
+        return this;
       }
     }
     uiALPartUnitIdx = g_auiRasterToZscan[ uiAbsPartIdx + getPic()->getNumPartitionsInCtu() - numPartInCtuWidth - 1 ];
@@ -1186,10 +1184,9 @@ const TComDataCU* TComDataCU::getPUBelowLeft(UInt& uiBLPartUnitIdx,  UInt uiCurr
 
 const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCurrPartUnitIdx, UInt uiPartUnitOffset, Bool bEnforceSliceRestriction) const
 {
-  UInt uiAbsPartIdxRT     = g_auiZscanToRaster[uiCurrPartUnitIdx]; // 1 3 9 11
-
+  UInt uiAbsPartIdxRT     = g_auiZscanToRaster[uiCurrPartUnitIdx];
   UInt uiAbsZorderCUIdx   = g_auiZscanToRaster[ m_absZIdxInCtu ] + (m_puhWidth[0] / m_pcPic->getMinCUWidth()) - 1;
-  const UInt numPartInCtuWidth = m_pcPic->getNumPartInCtuWidth(); //is 4 when ctu is 16
+  const UInt numPartInCtuWidth = m_pcPic->getNumPartInCtuWidth();
 
   if( ( m_pcPic->getCtu(m_ctuRsAddr)->getCUPelX() + g_auiRasterToPelX[uiAbsPartIdxRT] + (m_pcPic->getPicSym()->getMinCUHeight() * uiPartUnitOffset)) >= m_pcSlice->getSPS()->getPicWidthInLumaSamples() )
   {
@@ -1197,11 +1194,11 @@ const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCur
     return NULL;
   }
 
-  if ( RasterAddress::lessThanCol( uiAbsPartIdxRT, numPartInCtuWidth - uiPartUnitOffset, numPartInCtuWidth ) ) // to identify whether the wanted right above pixel is at the left side of the right most pixel in the ctu
+  if ( RasterAddress::lessThanCol( uiAbsPartIdxRT, numPartInCtuWidth - uiPartUnitOffset, numPartInCtuWidth ) )
   {
-    if ( !RasterAddress::isZeroRow( uiAbsPartIdxRT, numPartInCtuWidth ) ) // tu is not at the first row of ctu, the wanted pixel can be found in the current ctu
+    if ( !RasterAddress::isZeroRow( uiAbsPartIdxRT, numPartInCtuWidth ) )
     {
-      if ( uiCurrPartUnitIdx > g_auiRasterToZscan[ uiAbsPartIdxRT - numPartInCtuWidth + uiPartUnitOffset ] ) // make sure the wanted right above pixel is already processed, use zigzag to check it
+      if ( uiCurrPartUnitIdx > g_auiRasterToZscan[ uiAbsPartIdxRT - numPartInCtuWidth + uiPartUnitOffset ] )
       {
         uiARPartUnitIdx = g_auiRasterToZscan[ uiAbsPartIdxRT - numPartInCtuWidth + uiPartUnitOffset ];
         if ( RasterAddress::isEqualRowOrCol( uiAbsPartIdxRT, uiAbsZorderCUIdx, numPartInCtuWidth ) )
@@ -1214,7 +1211,6 @@ const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCur
           return this;
         }
       }
-
       uiARPartUnitIdx = MAX_UINT;
       return NULL;
     }
@@ -1224,10 +1220,10 @@ const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCur
     {
       return NULL;
     }
-    return m_pCtuAbove; // tu is at the first row of ctu
+    return m_pCtuAbove;
   }
 
-  if ( !RasterAddress::isZeroRow( uiAbsPartIdxRT, numPartInCtuWidth ) ) //if at the right side of the current ctu, and also not first row of the current ctu, this wanted pixel has no chance to be alreayd processed
+  if ( !RasterAddress::isZeroRow( uiAbsPartIdxRT, numPartInCtuWidth ) )
   {
     uiARPartUnitIdx = MAX_UINT;
     return NULL;
@@ -1238,7 +1234,7 @@ const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCur
   {
     return NULL;
   }
-  return m_pCtuAboveRight; //if at the right side of the current ctu, but it is first row of the current ctu, it depends on ctuaboveright exists or not
+  return m_pCtuAboveRight;
 }
 
 /** Get left QpMinCu

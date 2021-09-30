@@ -42,9 +42,6 @@
 #include "Debug.h"
 #include "TComPrediction.h"
 
-//nntra
-const int MULTI_LANE = 8;
-
 //! \ingroup TLibCommon
 //! \{
 
@@ -65,8 +62,7 @@ Void fillReferenceSamples( const Int bitDepth,
                            const Int iLeftUnits,
                            const UInt uiWidth, 
                            const UInt uiHeight, 
-                           const Int iPicStride,
-						         Pel* multiRec);
+                           const Int iPicStride );
 
 /// constrained intra prediction
 Bool  isAboveLeftAvailable  ( const TComDataCU* pcCU, UInt uiPartIdxLT );
@@ -122,16 +118,16 @@ Void TComPrediction::initIntraPatternChType( TComTU &rTu, const ComponentID comp
 
   TComDataCU *pcCU=rTu.getCU();
   const TComSPS &sps = *(pcCU->getSlice()->getSPS());
-  const UInt uiZorderIdxInPart=rTu.GetAbsPartIdxTU(); //tu in cu
+  const UInt uiZorderIdxInPart=rTu.GetAbsPartIdxTU();
   const UInt uiTuWidth        = rTu.getRect(compID).width;
   const UInt uiTuHeight       = rTu.getRect(compID).height;
   const UInt uiTuWidth2       = uiTuWidth  << 1;
   const UInt uiTuHeight2      = uiTuHeight << 1;
 
-  const Int  iBaseUnitSize    = sps.getMaxCUWidth() >> sps.getMaxTotalCUDepth(); //4x4 
+  const Int  iBaseUnitSize    = sps.getMaxCUWidth() >> sps.getMaxTotalCUDepth();
   const Int  iUnitWidth       = iBaseUnitSize  >> pcCU->getPic()->getPicYuvRec()->getComponentScaleX(compID);
   const Int  iUnitHeight      = iBaseUnitSize  >> pcCU->getPic()->getPicYuvRec()->getComponentScaleY(compID);
-  const Int  iTUWidthInUnits  = uiTuWidth  / iUnitWidth; // how many basic units (4x4 in the luma case) in the tu
+  const Int  iTUWidthInUnits  = uiTuWidth  / iUnitWidth;
   const Int  iTUHeightInUnits = uiTuHeight / iUnitHeight;
   const Int  iAboveUnits      = iTUWidthInUnits  << 1;
   const Int  iLeftUnits       = iTUHeightInUnits << 1;
@@ -139,21 +135,14 @@ Void TComPrediction::initIntraPatternChType( TComTU &rTu, const ComponentID comp
 
   assert(iTUHeightInUnits > 0 && iTUWidthInUnits > 0);
 
-  const Int  iPartIdxStride   = pcCU->getPic()->getNumPartInCtuWidth(); //ctu size/4
-  const UInt uiPartIdxLT      = pcCU->getZorderIdxInCtu() + uiZorderIdxInPart; //the left top 4x4 of tu in ctu
+  const Int  iPartIdxStride   = pcCU->getPic()->getNumPartInCtuWidth();
+  const UInt uiPartIdxLT      = pcCU->getZorderIdxInCtu() + uiZorderIdxInPart;
   const UInt uiPartIdxRT      = g_auiRasterToZscan[ g_auiZscanToRaster[ uiPartIdxLT ] +   iTUWidthInUnits  - 1                   ];
   const UInt uiPartIdxLB      = g_auiRasterToZscan[ g_auiZscanToRaster[ uiPartIdxLT ] + ((iTUHeightInUnits - 1) * iPartIdxStride)];
 
-  //pcCU->getZorderIdxInCtu(): cu in ctu
-  //uiZorderIdxInPart : tu in cu
-
-  Int   iPicStride = pcCU->getPic()->getStride(compID); //pic width + margin
-
-
+  Int   iPicStride = pcCU->getPic()->getStride(compID);
   Bool  bNeighborFlags[4 * MAX_NUM_PART_IDXS_IN_CTU_WIDTH + 1];
   Int   iNumIntraNeighbor = 0;
-
-  //cout << "cu in ctu: " << pcCU->getZorderIdxInCtu() << " tu in cu: " << uiZorderIdxInPart << endl;
 
   bNeighborFlags[iLeftUnits] = isAboveLeftAvailable( pcCU, uiPartIdxLT );
   iNumIntraNeighbor += bNeighborFlags[iLeftUnits] ? 1 : 0;
@@ -172,11 +161,8 @@ Void TComPrediction::initIntraPatternChType( TComTU &rTu, const ComponentID comp
 #endif
 
   {
-    Pel *piIntraTemp   = m_piYuvExt[compID][PRED_BUF_UNFILTERED]; //the second dimension: 0 for unfiltered, 1 for filtered, piIntraTemp[0] is left-top 1 pixel
+    Pel *piIntraTemp   = m_piYuvExt[compID][PRED_BUF_UNFILTERED];
     Pel *piRoiOrigin = pcCU->getPic()->getPicYuvRec()->getAddr(compID, pcCU->getCtuRsAddr(), pcCU->getZorderIdxInCtu()+uiZorderIdxInPart);
-
-	Pel multiRec[(MAX_CU_SIZE - 1 + MULTI_LANE) * MULTI_LANE + (MAX_CU_SIZE - 1) * MULTI_LANE];
-
 #if O0043_BEST_EFFORT_DECODING
     const Int  bitDepthForChannelInStream = sps.getStreamBitDepth(chType);
     fillReferenceSamples (bitDepthForChannelInStream, bitDepthForChannelInStream - bitDepthForChannel,
@@ -184,7 +170,7 @@ Void TComPrediction::initIntraPatternChType( TComTU &rTu, const ComponentID comp
     fillReferenceSamples (bitDepthForChannel,
 #endif
                           piRoiOrigin, piIntraTemp, bNeighborFlags, iNumIntraNeighbor,  iUnitWidth, iUnitHeight, iAboveUnits, iLeftUnits,
-                          uiROIWidth, uiROIHeight, iPicStride, multiRec);
+                          uiROIWidth, uiROIHeight, iPicStride);
 
 
 #if DEBUG_STRING
@@ -347,21 +333,14 @@ Void fillReferenceSamples( const Int bitDepth,
                            const Int iLeftUnits,
                            const UInt uiWidth, 
                            const UInt uiHeight, 
-                           const Int iPicStride,
-						         Pel* multiRec)
+                           const Int iPicStride )
 {
   const Pel* piRoiTemp;
   Int  i, j;
   Int  iDCValue = 1 << (bitDepth - 1);
   const Int iTotalUnits = iAboveUnits + iLeftUnits + 1; //+1 for top-left
 
-  // nntra
-  const Pel* nnRoiTemp;
-  int nnTusize = (uiHeight - 1) / 2;
-  int nnTotalPixels = (uiWidth - 1 + MULTI_LANE) * MULTI_LANE + (uiHeight - 1) * MULTI_LANE;
-  Int nni, nnj;
-
-  if (iNumIntraNeighbor == 0) // fill all the referenced pixels by dc
+  if (iNumIntraNeighbor == 0)
   {
     // Fill border with DC value
     for (i=0; i<uiWidth; i++)
@@ -372,20 +351,13 @@ Void fillReferenceSamples( const Int bitDepth,
     {
       piIntraTemp[i*uiWidth] = iDCValue;
     }
-
-	// nntra
-	for (nni = 0; nni < nnTotalPixels; nni++)
-	{
-		multiRec[i] = iDCValue;
-	}
-
   }
   else if (iNumIntraNeighbor == iTotalUnits)
   {
     // Fill top-left border and top and top right with rec. samples
-    piRoiTemp = piRoiOrigin - iPicStride - 1; // point to the left-top 1 pixel in the rec yuv
+    piRoiTemp = piRoiOrigin - iPicStride - 1;
 
-    for (i=0; i<uiWidth; i++) // fill left-top, top, top-right with rec. samples
+    for (i=0; i<uiWidth; i++)
     {
 #if O0043_BEST_EFFORT_DECODING
       piIntraTemp[i] = piRoiTemp[i] << bitDepthDelta;
@@ -406,28 +378,6 @@ Void fillReferenceSamples( const Int bitDepth,
 #endif
       piRoiTemp += iPicStride;
     }
-
-	// Fill for nntra
-	// fill the left
-	nnRoiTemp = piRoiOrigin - MULTI_LANE; // the left top pixel of the left bottom block
-	for (nni = 0; nni < uiHeight - 1; nni++) 
-	{
-		for (nnj = 0; nnj < MULTI_LANE; nnj++)
-		{
-			multiRec[nni * MULTI_LANE + nnj] = *(nnRoiTemp + nni*iPicStride + nnj);
-		}
-	}
-
-	//fill the top
-	nnRoiTemp = piRoiOrigin - MULTI_LANE - iPicStride; // the left bottom pixel of the left top block
-	for (nni = 0; nni < (uiWidth - 1 + MULTI_LANE); nni++) 
-	{
-		for (nnj = 0; nnj < MULTI_LANE; nnj++)
-		{
-			multiRec[(MULTI_LANE * (uiHeight - 1)) + nni*MULTI_LANE + nnj] = *(nnRoiTemp + nni - nnj*iPicStride);
-		}
-	}
-
   }
   else // reference samples are partially available
   {
@@ -437,25 +387,17 @@ Void fillReferenceSamples( const Int bitDepth,
     Pel  *piIntraLineTemp;
     const Bool *pbNeighborFlags;
 
+
     // Initialize
     for (i=0; i<iTotalSamples; i++)
     {
       piIntraLine[i] = iDCValue;
     }
 
-	Pel nnIntraLine[ (MAX_CU_SIZE*2+MULTI_LANE)*MULTI_LANE /* top */ + MAX_CU_SIZE*2*MULTI_LANE /* left */ ];
-	for (i = 0; i < nnTotalPixels; i++)
-	{
-		nnIntraLine[i] = iDCValue;
-	}
-
     // Fill top-left sample
     piRoiTemp = piRoiOrigin - iPicStride - 1;
-    piIntraLineTemp = piIntraLine + (iLeftUnits * unitHeight); //pixel-wise
-    pbNeighborFlags = bNeighborFlags + iLeftUnits; //basic-unit-wise
-
-	nnRoiTemp = piRoiOrigin - MULTI_LANE - iPicStride;
-
+    piIntraLineTemp = piIntraLine + (iLeftUnits * unitHeight);
+    pbNeighborFlags = bNeighborFlags + iLeftUnits;
     if (*pbNeighborFlags)
     {
 #if O0043_BEST_EFFORT_DECODING
@@ -467,23 +409,12 @@ Void fillReferenceSamples( const Int bitDepth,
       {
         piIntraLineTemp[i] = topLeftVal;
       }
-
-	  for (nni = 0; nni < MULTI_LANE; nni++) //horizontal movement
-	  {
-		  for (nnj = 0; nnj < MULTI_LANE; nnj++) //vertial movement
-		  {
-			  multiRec[(MULTI_LANE * (uiHeight - 1)) + nni* MULTI_LANE + nnj] = *(nnRoiTemp + nni - nnj*iPicStride);
-		  }
-	  }
-
     }
 
     // Fill left & below-left samples (downwards)
     piRoiTemp += iPicStride;
     piIntraLineTemp--;
     pbNeighborFlags--;
-
-	nnRoiTemp = piRoiOrigin - MULTI_LANE;
 
     for (j=0; j<iLeftUnits; j++)
     {
@@ -496,18 +427,11 @@ Void fillReferenceSamples( const Int bitDepth,
 #else
           piIntraLineTemp[-i] = piRoiTemp[i*iPicStride];
 #endif
-	
-		  int nnHeightTmp = j*unitHeight + i;
-		  for (nnj = 0; nnj < MULTI_LANE; nnj++)
-		  {
-			  multiRec[nnHeightTmp * MULTI_LANE + nnj] = *(nnRoiTemp + nnHeightTmp*iPicStride + nnj);
-		  }
         }
       }
       piRoiTemp += unitHeight*iPicStride;
       piIntraLineTemp -= unitHeight;
       pbNeighborFlags--;
-	  
     }
 
     // Fill above & above-right samples (left-to-right) (each unit has "unitWidth" samples)
@@ -515,9 +439,6 @@ Void fillReferenceSamples( const Int bitDepth,
     // offset line buffer by iNumUints2*unitHeight (for left/below-left) + unitWidth (for above-left)
     piIntraLineTemp = piIntraLine + (iLeftUnits * unitHeight) + unitWidth;
     pbNeighborFlags = bNeighborFlags + iLeftUnits + 1;
-
-	nnRoiTemp = piRoiOrigin - MULTI_LANE - iPicStride;
-
     for (j=0; j<iAboveUnits; j++)
     {
       if (*pbNeighborFlags)
@@ -529,13 +450,6 @@ Void fillReferenceSamples( const Int bitDepth,
 #else
           piIntraLineTemp[i] = piRoiTemp[i];
 #endif
-		  
-		  int nnWidthTmp = MULTI_LANE + (j*unitWidth + i);
-		  for (nnj = 0; nnj < MULTI_LANE; nnj++)
-		  {
-			  multiRec[(MULTI_LANE * (uiHeight - 1)) + nnWidthTmp*MULTI_LANE + nnj] = *(nnRoiTemp + nnWidthTmp - nnj*iPicStride);
-		  }
-         
         }
       }
       piRoiTemp += unitWidth;
@@ -553,24 +467,16 @@ Void fillReferenceSamples( const Int bitDepth,
       // very bottom unit of bottom-left; at least one unit will be valid.
       {
         Int   iNext = 1;
-        while (iNext < iTotalUnits && !bNeighborFlags[iNext]) // start from bottom-left, clockwisely find the first effective reference (rec.) sample
+        while (iNext < iTotalUnits && !bNeighborFlags[iNext])
         {
           iNext++;
         }
         Pel *piIntraLineNext = piIntraLine + ((iNext < iLeftUnits) ? (iNext * unitHeight) : (piIntraLineTopRowOffset + (iNext * unitWidth)));
-
         const Pel refSample = *piIntraLineNext;
-
-		Pel nnRefSample[MULTI_LANE]; //for simplicity, use the same pixel to pad MULTI_LANE pixels
-		for (nni = 0; nni < MULTI_LANE; nni++)
-		{
-			nnRefSample[nni] = *piIntraLineNext;
-		}
-
         // Pad unavailable samples with new value
-        Int iNextOrTop = std::min<Int>(iNext, iLeftUnits); //if iNext <= iLeftUnits, only pad left unit; otherwise, pad both left and top unit
+        Int iNextOrTop = std::min<Int>(iNext, iLeftUnits);
         // fill left column
-        while (iCurrJnit < iNextOrTop) //iCurrJnit is unit-wise
+        while (iCurrJnit < iNextOrTop)
         {
           for (i=0; i<unitHeight; i++)
           {
@@ -589,46 +495,6 @@ Void fillReferenceSamples( const Int bitDepth,
           piIntraLineCur += unitWidth;
           iCurrJnit++;
         }
-
-		//nntra
-		iCurrJnit = 0;
-		while (iCurrJnit < iNextOrTop)
-		{
-			for (nni = 0; nni < unitHeight; nni++)
-			{
-				int nnHeightTmp = uiHeight - 1 - (iCurrJnit*2+nni); //vertical movement
-				for (nnj = 0; nnj < MULTI_LANE; nnj++)
-				{
-					multiRec[nnHeightTmp * MULTI_LANE + nnj] = nnRefSample[nnj];
-				}
-			}
-			iCurrJnit++;
-		}
-		while (iCurrJnit < iNext)
-		{
-			if (iCurrJnit == iLeftUnits) // pad top left 
-			{
-				for (nni = 0; nni < MULTI_LANE; nni++)
-				{
-					for (nnj = 0; nnj < MULTI_LANE; nnj++)
-					{
-						multiRec[(MULTI_LANE * (uiHeight - 1)) + nni*MULTI_LANE + nnj] = nnRefSample[nnj];
-					}
-				}
-			}
-			else
-			{
-				for (nni = 0; nni < unitWidth; nni++)
-				{
-					int nnWidthTmp = MULTI_LANE + (iCurrJnit - iLeftUnits)*nni; //hortizontal movement
-					for (nnj = 0; nnj < MULTI_LANE; nnj++)
-					{
-						multiRec[(MULTI_LANE * (uiHeight - 1)) + nnWidthTmp*MULTI_LANE + nnj] = nnRefSample[nnj];
-					}
-				}
-			}
-			iCurrJnit++;
-		}
       }
     }
 
@@ -639,51 +505,13 @@ Void fillReferenceSamples( const Int bitDepth,
       {
         {
           const Int numSamplesInCurrUnit = (iCurrJnit >= iLeftUnits) ? unitWidth : unitHeight;
-          const Pel refSample = *(piIntraLineCur-1); //use the left effective reference(rec.) sample to pad
+          const Pel refSample = *(piIntraLineCur-1);
           for (i=0; i<numSamplesInCurrUnit; i++)
           {
             piIntraLineCur[i] = refSample;
           }
           piIntraLineCur += numSamplesInCurrUnit;
-          
-		  //nntra
-		  if (iCurrJnit < iLeftUnits)
-		  {
-			  for (nni = 0; nni < unitHeight; nni++)
-			  {
-				  int nnHeightTmp = uiHeight - 1 - (iCurrJnit * 2 + nni); //vertical movement
-				  for (nnj = 0; nnj < MULTI_LANE; nnj++)
-				  {
-					  multiRec[nnHeightTmp * MULTI_LANE + nnj] = multiRec[(nnHeightTmp + unitHeight) * MULTI_LANE + nnj];
-				  }
-			  }
-		  }
-		  else if (iCurrJnit == iLeftUnits)
-		  {
-			  for (nni = 0; nni < MULTI_LANE; nni++)
-			  {
-				  for (nnj = 0; nnj < MULTI_LANE; nnj++)
-				  {
-					  multiRec[(MULTI_LANE * (uiHeight - 1)) + nni*MULTI_LANE + nnj] = multiRec[0];
-				  }
-			  }
-		  }
-		  else
-		  {
-			  for (nni = 0; nni < unitWidth; nni++)
-			  {
-				  int nnWidthTmp = MULTI_LANE + (iCurrJnit - iLeftUnits)*nni; //hortizontal movement
-				  for (nnj = 0; nnj < MULTI_LANE; nnj++)
-				  {
-					  multiRec[(MULTI_LANE * (uiHeight - 1)) + nnWidthTmp*MULTI_LANE + nnj] = \
-						  multiRec[(MULTI_LANE * (uiHeight - unitWidth)) + (nnWidthTmp - 1)*MULTI_LANE + nnj];
-				  }
-			  }
-		  }
-		  
-		  
-		  
-		  iCurrJnit++;
+          iCurrJnit++;
         }
       }
       else
@@ -695,10 +523,8 @@ Void fillReferenceSamples( const Int bitDepth,
 
     // Copy processed samples
 
-    piIntraLineTemp = piIntraLine + uiHeight + unitWidth - 2; //piIntraLineTemp, used as tmp pointer
+    piIntraLineTemp = piIntraLine + uiHeight + unitWidth - 2;
     // top left, top and top right samples
-	// for piIntraTemp, left and left-bottom consumes uiHeight-1 pixels, left-top consumes unitWidth pixels, top and top-right consumes uiWidth-1 pixels,
-	// so (uiHeight-1)+(unitWidth-1) = uiHeight + unitWidth - 2
     for (i=0; i<uiWidth; i++)
     {
       piIntraTemp[i] = piIntraLineTemp[i];

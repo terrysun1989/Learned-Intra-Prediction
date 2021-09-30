@@ -642,17 +642,15 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
             )))
         {
           xCheckRDCostIntra( rpcBestCU, rpcTempCU, SIZE_2Nx2N DEBUG_STRING_PASS_INTO(sDebug) );
-          /*rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
-		  
-		  if( uiDepth == sps.getLog2DiffMaxMinCodingBlockSize() )
+          rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
+          if( uiDepth == sps.getLog2DiffMaxMinCodingBlockSize() )
           {
             if( rpcTempCU->getWidth(0) > ( 1 << sps.getQuadtreeTULog2MinSize() ) )
             {
               xCheckRDCostIntra( rpcBestCU, rpcTempCU, SIZE_NxN DEBUG_STRING_PASS_INTO(sDebug)   );
               rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
             }
-          } */
-		  
+          }
         }
 
         // test PCM
@@ -846,7 +844,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
           rpcBestCU->getTotalCost()=MAX_DOUBLE;
         }
       }
-	  rpcBestCU->getTotalCost() = MAX_DOUBLE;
+
       xCheckBestMode( rpcBestCU, rpcTempCU, uiDepth DEBUG_STRING_PASS_INTO(sDebug) DEBUG_STRING_PASS_INTO(sTempDebug) DEBUG_STRING_PASS_INTO(false) ); // RD compare current larger prediction
                                                                                                                                                        // with sub partitioned prediction.
     }

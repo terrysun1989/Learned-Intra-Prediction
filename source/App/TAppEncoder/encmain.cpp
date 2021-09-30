@@ -40,6 +40,8 @@
 #include "TAppEncTop.h"
 #include "TAppCommon/program_options_lite.h"
 
+ofstream encodeTime("encodeTime.txt", ios::app);
+
 //! \ingroup TAppEncoder
 //! \{
 
@@ -100,6 +102,8 @@ int main(int argc, char* argv[])
   // ending time
   dResult = (Double)(clock()-lBefore) / CLOCKS_PER_SEC;
   printf("\n Total Time: %12.3f sec.\n", dResult);
+
+  encodeTime << dResult << endl;
 
   // destroy application encoder class
   cTAppEncTop.destroy();

@@ -44,10 +44,6 @@
 #include <math.h>
 #include <limits>
 
-#include <fstream>
-
-bool nntra_flag = false;
-ofstream test1("test.txt");
 
 //! \ingroup TLibEncoder
 //! \{
@@ -1238,10 +1234,6 @@ Void TEncSearch::xIntraCodingTUBlock(       TComYuv*    pcOrgYuv,
       pResi += uiStride;
       pPred += uiStride;
     }
-
-	if (nntra_flag)
-		test1 << 3 << endl;
-
   }
 
   if (pcCU->getSlice()->getPPS()->getPpsRangeExtension().getCrossComponentPredictionEnabledFlag())
@@ -2456,22 +2448,7 @@ TEncSearch::estIntraPredLumaQT(TComDataCU* pcCU,
       Distortion uiPUDistY = 0;
       Double     dPUCost   = 0.0;
 
-	  if (tuRecurseWithPU.getRect(COMPONENT_Y).height == 8)
-		  nntra_flag = true;
-
       xRecurIntraCodingLumaQT( pcOrgYuv, pcPredYuv, pcResiYuv, resiLumaPU, uiPUDistY, false, dPUCost, tuRecurseWithPU DEBUG_STRING_PASS_INTO(sModeTree));
-	  
-	  nntra_flag = false;
-	  //cout << tuRecurseWithPU.getRect(COMPONENT_Y).height << endl;  8 and 16
-	  
-	  /*
-	  if ((pcCU->getCUPelX() > 16) && (pcCU->getCUPelY() > 16) && (pcCU->getCUPelX() < (pcCU->getPic()->getFrameWidthInCtus() * 64 - 64)) && (pcCU->getCUPelY() < (pcCU->getPic()->getFrameHeightInCtus() * 64 - 64)))
-	  {
-		  if (tuRecurseWithPU.getRect(COMPONENT_Y).height==)
-		  {
-		  }
-	  }*/
-	  //cout << pcCU->getPic()->getFrameWidthInCtus() * 64 - 64 << 
 
       // check r-d cost
       if( dPUCost < dBestPUCost )
