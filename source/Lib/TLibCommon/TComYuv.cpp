@@ -45,6 +45,8 @@
 #include "TComYuv.h"
 #include "TComInterpolationFilter.h"
 
+#include <iostream>
+using namespace std;
 //! \ingroup TLibCommon
 //! \{
 

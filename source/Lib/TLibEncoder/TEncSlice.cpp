@@ -39,6 +39,8 @@
 #include "TEncSlice.h"
 #include <math.h>
 
+bool nnEncodeCtuFlag = false;
+
 //! \ingroup TLibEncoder
 //! \{
 
@@ -1058,10 +1060,15 @@ Void TEncSlice::encodeSlice   ( TComPic* pcPic, TComOutputBitstream* pcSubstream
 #if ENC_DEC_TRACE
     g_bJustDoIt = g_bEncDecTraceEnable;
 #endif
+
+	nnEncodeCtuFlag = true;
+
       m_pcCuEncoder->encodeCtu( pCtu );
 #if ENC_DEC_TRACE
     g_bJustDoIt = g_bEncDecTraceDisable;
 #endif
+
+	nnEncodeCtuFlag = false;
 
     //Store probabilities of second CTU in line into buffer
     if ( ctuXPosInCtus == tileXPosInCtus+1 && wavefrontsEnabled)

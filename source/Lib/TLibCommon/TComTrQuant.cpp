@@ -511,8 +511,10 @@ Void partialButterfly8(TCoeff *src, TCoeff *dst, Int shift, Int line)
   TCoeff EE[2],EO[2];
   TCoeff add = (shift > 0) ? (1<<(shift-1)) : 0;
 
+
   for (j=0; j<line; j++)
   {
+
     /* E and O*/
     for (k=0;k<4;k++)
     {
@@ -535,9 +537,12 @@ Void partialButterfly8(TCoeff *src, TCoeff *dst, Int shift, Int line)
     dst[5*line] = (g_aiT8[TRANSFORM_FORWARD][5][0]*O[0] + g_aiT8[TRANSFORM_FORWARD][5][1]*O[1] + g_aiT8[TRANSFORM_FORWARD][5][2]*O[2] + g_aiT8[TRANSFORM_FORWARD][5][3]*O[3] + add)>>shift;
     dst[7*line] = (g_aiT8[TRANSFORM_FORWARD][7][0]*O[0] + g_aiT8[TRANSFORM_FORWARD][7][1]*O[1] + g_aiT8[TRANSFORM_FORWARD][7][2]*O[2] + g_aiT8[TRANSFORM_FORWARD][7][3]*O[3] + add)>>shift;
 
+
     src += 8;
     dst ++;
   }
+
+
 }
 
 /** 8x8 inverse transform implemented using partial butterfly structure (1D)

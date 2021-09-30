@@ -40,6 +40,47 @@
 #include "TComPic.h"
 #include "TComTU.h"
 
+#include<fstream>
+
+#if TEST_DATA_DEC
+
+ofstream predPixel_dec_4("predPixel_dec_4.txt");
+ofstream predPixel_dec_8("predPixel_dec_8.txt");
+ofstream predPixel_dec_16("predPixel_dec_16.txt");
+ofstream predPixel_dec_32("predPixel_dec_32.txt");
+
+ofstream predMode_dec_4("predMode_dec_4.txt");
+ofstream predMode_dec_8("predMode_dec_8.txt");
+ofstream predMode_dec_16("predMode_dec_16.txt");
+ofstream predMode_dec_32("predMode_dec_32.txt");
+
+ofstream recPixelTxt_4("recPixel_4.txt");
+ofstream recPixelTxt_8("recPixel_8.txt");
+ofstream recPixelTxt_16("recPixel_16.txt");
+ofstream recPixelTxt_32("recPixel_32.txt");
+
+ofstream bestBlk4("bestBlk4.txt");
+ofstream bestBlk8("bestBlk8.txt");
+ofstream bestBlk16("bestBlk16.txt");
+ofstream bestBlk32("bestBlk32.txt");
+
+#endif
+
+//defined in TComPattern.cpp
+extern bool nnBestModeFlag;
+extern bool nnBestModeChromaFlag;
+
+extern Pel multiRec[(MAX_CU_SIZE * 2 + MAX_CU_SIZE) * MAX_CU_SIZE + (MAX_CU_SIZE * 2) * MAX_CU_SIZE];
+extern void nnPred(Pel *recPixel, int nnRefPel, int outPelNum, Pel *predPixel, Pel *hmPredPixel, int ch);
+
+bool finalBestModeFlag = false;
+bool finalBestChromaModeFlag = false;
+
+Pel localRec[(MAX_CU_SIZE * 2 + MAX_CU_SIZE) * MAX_CU_SIZE + (MAX_CU_SIZE * 2) * MAX_CU_SIZE] = { 128 };
+
+extern int nnMode;
+
+
 //! \ingroup TLibCommon
 //! \{
 
@@ -387,90 +428,459 @@ Void TComPrediction::xPredIntraAng(       Int bitDepth,
   }
 }
 
-Void TComPrediction::predIntraAng( const ComponentID compID, UInt uiDirMode, Pel* piOrg /* Will be null for decoding */, UInt uiOrgStride, Pel* piPred, UInt uiStride, TComTU &rTu, const Bool bUseFilteredPredSamples, const Bool bUseLosslessDPCM )
+Void TComPrediction::predIntraAng(const ComponentID compID, UInt uiDirMode, Pel* piOrg /* Will be null for decoding */, UInt uiOrgStride, Pel* piPred, UInt uiStride, TComTU &rTu, const Bool bUseFilteredPredSamples, const Bool bUseLosslessDPCM)
 {
-  const ChannelType    channelType = toChannelType(compID);
-  const TComRectangle &rect        = rTu.getRect(isLuma(compID) ? COMPONENT_Y : COMPONENT_Cb);
-  const Int            iWidth      = rect.width;
-  const Int            iHeight     = rect.height;
+	const ChannelType    channelType = toChannelType(compID);
+	const TComRectangle &rect = rTu.getRect(isLuma(compID) ? COMPONENT_Y : COMPONENT_Cb);
+	const Int            iWidth = rect.width;
+	const Int            iHeight = rect.height;
 
-  assert( g_aucConvertToBit[ iWidth ] >= 0 ); //   4x  4
-  assert( g_aucConvertToBit[ iWidth ] <= 5 ); // 128x128
-  //assert( iWidth == iHeight  );
 
-        Pel *pDst = piPred;
+	assert(g_aucConvertToBit[iWidth] >= 0); //   4x  4
+	assert(g_aucConvertToBit[iWidth] <= 5); // 128x128
+	//assert( iWidth == iHeight  );
 
-  // get starting pixel in block
-  const Int sw = (2 * iWidth + 1);
+	bool useTipFlag = false;
+	
+	
+	if (iWidth == 4)
+		useTipFlag = UseTip4;
+	else if (iWidth == 8)
+		useTipFlag = !inria_tu8;
+	else if (iWidth == 16)
+		useTipFlag = !inria_tu16;
+	else if (iWidth == 32)
+		useTipFlag = !inria_tu32;
+	else
+	{
+		if (finalBestModeFlag)
+		{
+			cout << "wrong 64 pu" << endl;
+			cout << iWidth << endl;
+			assert(0);
+		}
+	}
+	
 
-  if ( bUseLosslessDPCM )
-  {
-    const Pel *ptrSrc = getPredictorPtr( compID, false );
-    // Sample Adaptive intra-Prediction (SAP)
-    if (uiDirMode==HOR_IDX)
-    {
-      // left column filled with reference samples
-      // remaining columns filled with piOrg data (if available).
-      for(Int y=0; y<iHeight; y++)
-      {
-        piPred[y*uiStride+0] = ptrSrc[(y+1)*sw];
-      }
-      if (piOrg!=0)
-      {
-        piPred+=1; // miss off first column
-        for(Int y=0; y<iHeight; y++, piPred+=uiStride, piOrg+=uiOrgStride)
-        {
-          memcpy(piPred, piOrg, (iWidth-1)*sizeof(Pel));
-        }
-      }
-    }
-    else // VER_IDX
-    {
-      // top row filled with reference samples
-      // remaining rows filled with piOrd data (if available)
-      for(Int x=0; x<iWidth; x++)
-      {
-        piPred[x] = ptrSrc[x+1];
-      }
-      if (piOrg!=0)
-      {
-        piPred+=uiStride; // miss off the first row
-        for(Int y=1; y<iHeight; y++, piPred+=uiStride, piOrg+=uiOrgStride)
-        {
-          memcpy(piPred, piOrg, iWidth*sizeof(Pel));
-        }
-      }
-    }
-  }
-  else
-  {
-    const Pel *ptrSrc = getPredictorPtr( compID, bUseFilteredPredSamples );
+	Pel *pDst = piPred;
 
-    if ( uiDirMode == PLANAR_IDX )
-    {
-      xPredIntraPlanar( ptrSrc+sw+1, sw, pDst, uiStride, iWidth, iHeight );
-    }
-    else
-    {
-      // Create the prediction
-            TComDataCU *const pcCU              = rTu.getCU();
-      const UInt              uiAbsPartIdx      = rTu.GetAbsPartIdxTU();
-      const Bool              enableEdgeFilters = !(pcCU->isRDPCMEnabled(uiAbsPartIdx) && pcCU->getCUTransquantBypass(uiAbsPartIdx));
-#if O0043_BEST_EFFORT_DECODING
-      const Int channelsBitDepthForPrediction = rTu.getCU()->getSlice()->getSPS()->getStreamBitDepth(channelType);
-#else
-      const Int channelsBitDepthForPrediction = rTu.getCU()->getSlice()->getSPS()->getBitDepth(channelType);
+	// get starting pixel in block
+	const Int sw = (2 * iWidth + 1);
+
+	int refNum = 0;
+	if ( useTipFlag )
+		refNum = (iWidth*4+8) * 8;
+	else
+		refNum = iWidth * iWidth * 5;
+
+	int outNum = iWidth * iWidth;
+	Pel *predPixel = new Pel[outNum];
+	memset(predPixel, 0, outNum * sizeof(Pel));
+
+	Pel *hmPredPixel = new Pel[outNum];
+	memset(hmPredPixel, 0, outNum * sizeof(Pel));
+	int ch = (compID == 0) ? 0 : 1; //0 luma, 1 chroma
+
+	TComDataCU *pcCU = rTu.getCU();
+
+	if (  
+		
+		(( nnStrengthenNnModeFlag ) &&(iWidth<= nnTuSize) && nnBestModeFlag && (compID == 0))\
+		|| (( nnStrengthenNnModeFlag ) && (iWidth<= nnTuSizeChroma) && nnBestModeChromaFlag && (compID != 0))
+		
+		
+		)
+	{
+		
+		if (((compID == 0) && (iWidth > 32)) || ((compID != 0) && (iWidth > 16)))
+			cout << "error1 " << compID << " " << iWidth << endl;
+	
+		//prepare input rec for nn
+		int tmp = 0;
+
+		if( useTipFlag )
+		{
+			int k = 0;
+			
+			for (Int j = 0; j < 8; j++)
+			{
+				for (Int i = 0; i < m_multiRefStride; i++)
+				{
+					localRec[k] = m_multiRefLines[j*m_multiRefStride + i];
+					k++;
+				}
+			}
+
+			for (Int j = 8; j < m_multiRefStride; j++)
+			{
+				for (Int i = 0; i < 8; i++)
+				{
+					localRec[k] = m_multiRefLines[j*m_multiRefStride + i];
+					k++;
+				}
+			}
+		}
+		else
+		{
+			for (int i = 0; i < refNum; i++)
+			{
+				localRec[i] = multiRec[i];
+			}
+		}
+
+		{
+
+
+			for (int i = 0; i < iWidth; i++)
+			{
+				for (int j = 0; j < iWidth; j++)
+				{
+					hmPredPixel[i*iWidth + j] = pDst[i*uiStride + j];
+				}
+			}
+
+			nnPred(localRec, refNum, outNum, predPixel, hmPredPixel, ch);
+
+			for (int i = 0; i < iWidth; i++)
+			{
+				for (int j = 0; j < iWidth; j++)
+				{
+					pDst[i*uiStride + j] = predPixel[i*iWidth + j];
+
+				}
+			}
+
+		}
+
+	}
+	else
+	{
+		if (bUseLosslessDPCM)
+		{
+			cout << "do" << endl;
+			assert(0);
+
+			const Pel *ptrSrc = getPredictorPtr(compID, false);
+			// Sample Adaptive intra-Prediction (SAP)
+			if (uiDirMode == HOR_IDX)
+			{
+				// left column filled with reference samples
+				// remaining columns filled with piOrg data (if available).
+				for (Int y = 0; y < iHeight; y++)
+				{
+					piPred[y*uiStride + 0] = ptrSrc[(y + 1)*sw];
+				}
+				if (piOrg != 0)
+				{
+					piPred += 1; // miss off first column
+					for (Int y = 0; y < iHeight; y++, piPred += uiStride, piOrg += uiOrgStride)
+					{
+						memcpy(piPred, piOrg, (iWidth - 1) * sizeof(Pel));
+					}
+				}
+			}
+			else // VER_IDX
+			{
+				// top row filled with reference samples
+				// remaining rows filled with piOrd data (if available)
+				for (Int x = 0; x < iWidth; x++)
+				{
+					piPred[x] = ptrSrc[x + 1];
+				}
+				if (piOrg != 0)
+				{
+					piPred += uiStride; // miss off the first row
+					for (Int y = 1; y < iHeight; y++, piPred += uiStride, piOrg += uiOrgStride)
+					{
+						memcpy(piPred, piOrg, iWidth * sizeof(Pel));
+					}
+				}
+			}
+		}
+		else
+		{
+			const Pel *ptrSrc = getPredictorPtr(compID, bUseFilteredPredSamples);
+
+#if ApplyIntraFCN && UseApplyIntraFCN
+			if (rTu.getCU()->getIsNetworkFlag(rTu.GetAbsPartIdxTU()))
+			{
+
+				//xPredUsingNetwork(rTu, pDst, uiStride, compID);
+
+				nnMode = 1;
+
+				//assert(iWidth <= 32);
+				//assert(uiDirMode == PLANAR_IDX);
+				int tmp = 0;
+				if ((iWidth == 4) && UseTip4)
+				{
+					//cout << m_multiRefStride << " t"<< endl;
+					int k = 0;
+
+					for (Int j = 0; j < 8; j++)
+					{
+						for (Int i = 0; i < m_multiRefStride; i++)
+						{
+							localRec[k] = m_multiRefLines[j*m_multiRefStride + i];
+							k++;
+						}
+					}
+
+					for (Int j = 8; j < m_multiRefStride; j++)
+					{
+						for (Int i = 0; i < 8; i++)
+						{
+							localRec[k] = m_multiRefLines[j*m_multiRefStride + i];
+							k++;
+						}
+					}
+				}
+				else
+				{
+					for (int i = 0; i < refNum; i++)
+					{
+						localRec[i] = multiRec[i];
+					}
+				}
+
+				//if ((iWidth == 8) && (compID == 0)) //no need, to be fixed
+				{
+
+
+					for (int i = 0; i < iWidth; i++)
+					{
+						for (int j = 0; j < iWidth; j++)
+						{
+							hmPredPixel[i*iWidth + j] = pDst[i*uiStride + j];
+						}
+					}
+
+
+
+					//cout << refNum << endl;
+
+					//if(iWidth!=16)
+					nnPred(localRec, refNum, outNum, predPixel, hmPredPixel, ch);
+
+					for (int i = 0; i < iWidth; i++)
+					{
+						for (int j = 0; j < iWidth; j++)
+						{
+							pDst[i*uiStride + j] = predPixel[i*iWidth + j];
+						}
+					}
+
+
+				}
+
+				return;
+			}
 #endif
-      xPredIntraAng( channelsBitDepthForPrediction, ptrSrc+sw+1, sw, pDst, uiStride, iWidth, iHeight, channelType, uiDirMode, enableEdgeFilters );
+			 
+			if (uiDirMode == PLANAR_IDX)
+			{
+				xPredIntraPlanar(ptrSrc + sw + 1, sw, pDst, uiStride, iWidth, iHeight);
+			}
+			else
+			{
+				// Create the prediction
+				TComDataCU *const pcCU = rTu.getCU();
+				const UInt              uiAbsPartIdx = rTu.GetAbsPartIdxTU();
+				const Bool              enableEdgeFilters = !(pcCU->isRDPCMEnabled(uiAbsPartIdx) && pcCU->getCUTransquantBypass(uiAbsPartIdx));
+#if O0043_BEST_EFFORT_DECODING
+				const Int channelsBitDepthForPrediction = rTu.getCU()->getSlice()->getSPS()->getStreamBitDepth(channelType);
+#else
+				const Int channelsBitDepthForPrediction = rTu.getCU()->getSlice()->getSPS()->getBitDepth(channelType);
+#endif
+				xPredIntraAng(channelsBitDepthForPrediction, ptrSrc + sw + 1, sw, pDst, uiStride, iWidth, iHeight, channelType, uiDirMode, enableEdgeFilters);
 
-      if( uiDirMode == DC_IDX )
-      {
-        xDCPredFiltering( ptrSrc+sw+1, sw, pDst, uiStride, iWidth, iHeight, channelType );
-      }
-    }
+				if (uiDirMode == DC_IDX)
+				{
+					xDCPredFiltering(ptrSrc + sw + 1, sw, pDst, uiStride, iWidth, iHeight, channelType);
+				}
+			}
+		}
+	}
+
+#if TEST_DATA_DEC
+
+  int uiWidth = iWidth;
+  int uiHeight = iHeight;
+
+  if (finalBestModeFlag && (compID == COMPONENT_Y))
+  {
+
+	  if (uiHeight == 4)
+	  {
+		  bestBlk4 << rTu.getCU()->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[rTu.GetAbsPartIdxTU()]] << " " \
+			  << rTu.getCU()->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[rTu.GetAbsPartIdxTU()]] << endl;
+	  }
+	  else if (uiHeight == 8)
+	  {
+		  bestBlk8 << rTu.getCU()->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[rTu.GetAbsPartIdxTU()]] << " " \
+			  << rTu.getCU()->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[rTu.GetAbsPartIdxTU()]] << endl;
+	  }
+	  else if (uiHeight == 16)
+	  {
+		  bestBlk16 << rTu.getCU()->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[rTu.GetAbsPartIdxTU()]] << " " \
+			  << rTu.getCU()->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[rTu.GetAbsPartIdxTU()]] << endl;
+	  }
+	  else if (uiHeight == 32)
+	  {
+		  bestBlk32 << rTu.getCU()->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[rTu.GetAbsPartIdxTU()]] << " " \
+			  << rTu.getCU()->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[rTu.GetAbsPartIdxTU()]] << endl;
+	  }
+
+	  //bestBlkSize << uiWidth << endl;
+
+	  int nnRefPel = (uiWidth * 2 + uiWidth) * uiWidth + (uiHeight * 2) * uiWidth;
+
+	  //cout << uiHeight << endl;
+
+	  
+
+	  for (int nnY = 0; nnY < uiHeight; nnY++)
+	  {
+		  for (int nnX = 0; nnX < uiWidth; nnX++)
+		  {
+			  //origPixel_dec << piOrg[nnY*uiStride + nnX] << " ";
+
+			  if(uiHeight==4)
+				  predPixel_dec_4 << piPred[nnY*uiStride + nnX] << " ";
+			  else if (uiHeight == 8)
+				  predPixel_dec_8 << piPred[nnY*uiStride + nnX] << " ";
+			  else if (uiHeight == 16)
+				  predPixel_dec_16 << piPred[nnY*uiStride + nnX] << " ";
+			  else if (uiHeight == 32)
+				  predPixel_dec_32 << piPred[nnY*uiStride + nnX] << " ";
+
+		  }
+		  if (nnY == (uiHeight - 1))
+		  {
+			  //origPixel_dec << endl;
+			  if (uiHeight == 4)
+				  predPixel_dec_4 << endl;
+			  else if (uiHeight == 8)
+				  predPixel_dec_8 << endl;
+			  else if (uiHeight == 16)
+				  predPixel_dec_16 << endl;
+			  else if (uiHeight == 32)
+				  predPixel_dec_32 << endl;
+		  }
+	  }
+
+	  if (uiHeight == 4)
+		  predMode_dec_4 << uiDirMode << endl;
+	  else if(uiHeight==8)
+		  predMode_dec_8 << uiDirMode << endl;
+	  else if (uiHeight == 16)
+		  predMode_dec_16 << uiDirMode << endl;
+	  else if (uiHeight == 32)
+		  predMode_dec_32 << uiDirMode << endl;
+
+	  //testMode << uiChFinalMode << endl;
+	  
+	  if (useTipFlag)
+	  {
+		  for (Int j = 0; j < 8; j++)
+		  {
+			  for (Int i = 0; i < m_multiRefStride; i++)
+			  {
+				  if (uiHeight == 4)
+				  {
+					  recPixelTxt_4 << m_multiRefLines[j*m_multiRefStride + i] << " ";
+				  }
+				  else if (uiHeight == 8)
+					  recPixelTxt_8 << m_multiRefLines[j*m_multiRefStride + i] << " ";
+				  else if (uiHeight == 16)
+					  recPixelTxt_16 << m_multiRefLines[j*m_multiRefStride + i] << " ";
+				  else if (uiHeight == 32)
+					  recPixelTxt_32 << m_multiRefLines[j*m_multiRefStride + i] << " ";
+			  }
+		  }
+		  for (Int j = 8; j < m_multiRefStride; j++)
+		  {
+			  for (Int i = 0; i < 8; i++)
+			  {
+				  if (uiHeight == 4)
+					  recPixelTxt_4 << m_multiRefLines[j*m_multiRefStride + i] << " ";
+				  else if (uiHeight == 8)
+					  recPixelTxt_8 << m_multiRefLines[j*m_multiRefStride + i] << " ";
+				  else if (uiHeight == 16)
+					  recPixelTxt_16 << m_multiRefLines[j*m_multiRefStride + i] << " ";
+				  else if (uiHeight == 32)
+					  recPixelTxt_32 << m_multiRefLines[j*m_multiRefStride + i] << " ";
+			  }
+		  }
+	  }
+	  else
+	  {
+		  for (int i = 0; i < refNum; i++)
+		  {
+			  if (uiHeight == 4)
+			  {
+				  recPixelTxt_4 << multiRec[i] << " ";
+			  }
+			  else if (uiHeight == 8)
+				  recPixelTxt_8 << multiRec[i] << " ";
+			  else if (uiHeight == 16)
+				  recPixelTxt_16 << multiRec[i] << " ";
+			  else if (uiHeight == 32)
+				  recPixelTxt_32 << multiRec[i] << " ";
+		  }
+	  }
+
+	  if (uiHeight == 4)
+		  recPixelTxt_4 << endl;
+	  else if (uiHeight == 8)
+		  recPixelTxt_8 << endl;
+	  else if (uiHeight == 16)
+		  recPixelTxt_16 << endl;
+	  else if (uiHeight == 32)
+		  recPixelTxt_32 << endl;
+
+	  
   }
+
+#endif
 
 }
+
+#if ApplyIntraFCN
+Void TComPrediction::xPredUsingNetwork(TComTU &rTu, Pel* rpDst, Int dstStride, const ComponentID compID)
+{
+	int curDepth = -1;
+
+	//float tempInput[1088];
+	int count = 0;
+	float average = 0;
+
+	Int blockSize = rTu.getRect(compID).width;
+	switch (blockSize)
+	{
+	case 32:
+		curDepth = 0;
+		break;
+	case 16:
+		curDepth = 1;
+		break;
+	case 8:
+		curDepth = 2;
+		break;
+	case 4:
+		curDepth = 3;
+		break;
+	default:
+		assert(0);
+		break;
+	}
+
+	//float* tempInput = net[curDepth]->input_blobs()[0]->mutable_cpu_data();
+	//assert(m_multiRefStride == blockSize * 2 + 8);
+
+
+}
+#endif
 
 /** Check for identical motion in both motion vector direction of a bi-directional predicted CU
   * \returns true, if motion vectors and reference pictures match

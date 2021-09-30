@@ -38,6 +38,16 @@
 #include "TDecCu.h"
 #include "TLibCommon/TComTU.h"
 #include "TLibCommon/TComPrediction.h"
+#include<fstream>
+extern bool nnBestModeFlag;
+extern bool nnBestModeChromaFlag;
+Int decBlkIdx = 0;
+
+double nnBestModeEncodeFlag[32400];
+extern Pel multiRec[(MAX_CU_SIZE * 2 + MAX_CU_SIZE) * MAX_CU_SIZE + (MAX_CU_SIZE * 2) * MAX_CU_SIZE];
+extern bool finalBestModeFlag;
+extern int nnMode;
+
 
 //! \ingroup TLibDecoder
 //! \{
@@ -77,6 +87,7 @@ Void TDecCu::create( UInt uiMaxDepth, UInt uiMaxWidth, UInt uiMaxHeight, ChromaF
   m_ppcYuvResi = new TComYuv*[m_uiMaxDepth-1];
   m_ppcYuvReco = new TComYuv*[m_uiMaxDepth-1];
   m_ppcCU      = new TComDataCU*[m_uiMaxDepth-1];
+  m_ppcOrigYuv = new TComYuv*[m_uiMaxDepth - 1];
 
   for ( UInt ui = 0; ui < m_uiMaxDepth-1; ui++ )
   {
@@ -95,6 +106,9 @@ Void TDecCu::create( UInt uiMaxDepth, UInt uiMaxWidth, UInt uiMaxHeight, ChromaF
     m_ppcYuvResi[ui] = new TComYuv;    m_ppcYuvResi[ui]->create( uiWidth, uiHeight, chromaFormatIDC );
     m_ppcYuvReco[ui] = new TComYuv;    m_ppcYuvReco[ui]->create( uiWidth, uiHeight, chromaFormatIDC );
     m_ppcCU     [ui] = new TComDataCU; m_ppcCU     [ui]->create( chromaFormatIDC, uiNumPartitions, uiWidth, uiHeight, true, uiMaxWidth >> (m_uiMaxDepth - 1) );
+
+	m_ppcOrigYuv[ui] = new TComYuv;	   m_ppcOrigYuv[ui]->create(uiWidth, uiHeight, chromaFormatIDC);
+
   }
 
   m_bDecodeDQP = false;
@@ -116,11 +130,21 @@ Void TDecCu::destroy()
     m_ppcYuvResi[ui]->destroy(); delete m_ppcYuvResi[ui]; m_ppcYuvResi[ui] = NULL;
     m_ppcYuvReco[ui]->destroy(); delete m_ppcYuvReco[ui]; m_ppcYuvReco[ui] = NULL;
     m_ppcCU     [ui]->destroy(); delete m_ppcCU     [ui]; m_ppcCU     [ui] = NULL;
+
+	if (m_ppcOrigYuv[ui])
+	{
+		m_ppcOrigYuv[ui]->destroy(); delete m_ppcOrigYuv[ui]; m_ppcOrigYuv[ui] = NULL;
+	}
   }
 
   delete [] m_ppcYuvResi; m_ppcYuvResi = NULL;
   delete [] m_ppcYuvReco; m_ppcYuvReco = NULL;
   delete [] m_ppcCU     ; m_ppcCU      = NULL;
+
+  if (m_ppcOrigYuv)
+  {
+	  delete[] m_ppcOrigYuv; m_ppcOrigYuv = NULL;
+  }
 }
 
 // ====================================================================================================================
@@ -462,14 +486,14 @@ TDecCu::xIntraRecBlk(       TComYuv*    pcRecoYuv,
                             TComYuv*    pcPredYuv,
                             TComYuv*    pcResiYuv,
                       const ComponentID compID,
-                            TComTU     &rTu)
+                            TComTU     &rTu,
+							TComYuv*	pcOrgYuv)
 {
   if (!rTu.ProcessComponentSection(compID))
   {
     return;
   }
   const Bool       bIsLuma = isLuma(compID);
-
 
   TComDataCU *pcCU = rTu.getCU();
   const TComSPS &sps=*(pcCU->getSlice()->getSPS());
@@ -482,6 +506,8 @@ TDecCu::xIntraRecBlk(       TComYuv*    pcRecoYuv,
         Pel* piPred            = pcPredYuv->getAddr( compID, uiAbsPartIdx );
   const ChromaFormat chFmt     = rTu.GetChromaFormat();
 
+  Pel* piOrg = pcOrgYuv->getAddr(compID, uiAbsPartIdx);
+
   if (uiWidth != uiHeight)
   {
     //------------------------------------------------
@@ -493,7 +519,7 @@ TDecCu::xIntraRecBlk(       TComYuv*    pcRecoYuv,
     //recurse further
     do
     {
-      xIntraRecBlk(pcRecoYuv, pcPredYuv, pcResiYuv, compID, subTURecurse);
+      xIntraRecBlk(pcRecoYuv, pcPredYuv, pcResiYuv, compID, subTURecurse, pcOrgYuv);
     } while (subTURecurse.nextSection(rTu));
 
     //------------------------------------------------
@@ -502,8 +528,12 @@ TDecCu::xIntraRecBlk(       TComYuv*    pcRecoYuv,
   }
 
   const UInt uiChPredMode  = pcCU->getIntraDir( toChannelType(compID), uiAbsPartIdx );
+  const UInt nnflag = pcCU->getNnFlag(toChannelType(compID), uiAbsPartIdx);
+
   const UInt partsPerMinCU = 1<<(2*(sps.getMaxTotalCUDepth() - sps.getLog2DiffMaxMinCodingBlockSize()));
-  const UInt uiChCodedMode = (uiChPredMode==DM_CHROMA_IDX && !bIsLuma) ? pcCU->getIntraDir(CHANNEL_TYPE_LUMA, getChromasCorrespondingPULumaIdx(uiAbsPartIdx, chFmt, partsPerMinCU)) : uiChPredMode;
+
+  UInt uiChCodedMode = (uiChPredMode == DM_CHROMA_IDX && !bIsLuma) ? pcCU->getIntraDir(CHANNEL_TYPE_LUMA, getChromasCorrespondingPULumaIdx(uiAbsPartIdx, chFmt, partsPerMinCU)) : uiChPredMode;
+  
   const UInt uiChFinalMode = ((chFmt == CHROMA_422)       && !bIsLuma) ? g_chroma422IntraAngleMappingTable[uiChCodedMode] : uiChCodedMode;
 
   //===== init availability pattern =====
@@ -512,14 +542,77 @@ TDecCu::xIntraRecBlk(       TComYuv*    pcRecoYuv,
 #if DEBUG_STRING
   std::ostream &ss(std::cout);
 #endif
-
+  
   DEBUG_STRING_NEW(sTemp)
+
+
+  nnMode = 0;
+  nnBestModeChromaFlag = false;
+  nnBestModeFlag = false;
+
+	  // set luma mode
+#if nnStrengthenNnModeFlag
+
+  if (uiWidth > 32)
+  {
+	  cout << "error64" << endl;
+	  assert(0);
+  }
+
+
+  Int Topx = pcCU->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[uiAbsPartIdx]];
+  Int Topy = pcCU->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[uiAbsPartIdx]];
+
+  Int RightBottom_x = Topx + uiWidth;
+  Int RightBottom_y = Topy + uiWidth;
+
+  bool xInside = (RightBottom_x + uiWidth) <= sps.getPicWidthInLumaSamples();
+  bool yInside = (RightBottom_y + uiWidth) <= sps.getPicHeightInLumaSamples();
+
+  if ((compID == 0) && (uiWidth <= nnTuSize) && (Topx > 0) && (Topy > 0) && xInside && yInside)
+  {
+
+#if NUM_MODE==35
+
+	  if (int(pcCU->getWidth(0)) >= 100) // pu(cu) constraint
+	  {
+		  nnMode = 0;
+		  nnBestModeFlag = false;
+	  }
+	  else if( (uiWidth <= 32)  ) // tu constraint
+	  {
+		  nnMode = uiChFinalMode + 1;
+		  nnBestModeFlag = true;
+	  }
+
+#else
+
+#endif
+
+  }
+
+#else
+  {
+	  nnBestModeFlag = false;
+  }
+#endif
+
+
   m_pcPrediction->initIntraPatternChType( rTu, compID, bUseFilteredPredictions  DEBUG_STRING_PASS_INTO(sTemp) );
 
 
   //===== get prediction signal =====
 
+  if ((pcCU->getCUPelX() > 0) && (pcCU->getCUPelY() > 0))
+	  finalBestModeFlag = true;
+  else
+	  finalBestModeFlag = false;
+
   m_pcPrediction->predIntraAng( compID,   uiChFinalMode, 0 /* Decoder does not have an original image */, 0, piPred, uiStride, rTu, bUseFilteredPredictions );
+  //m_pcPrediction->predIntraAng(compID, uiChFinalMode, piOrg, uiStride, piPred, uiStride, rTu, bUseFilteredPredictions);
+
+  nnBestModeFlag = false;
+  nnBestModeChromaFlag = false;
 
 #if DEBUG_STRING
   ss << sTemp;
@@ -629,6 +722,7 @@ TDecCu::xIntraRecBlk(       TComYuv*    pcRecoYuv,
       pReco    [ uiX ] = ClipBD( pPred[ uiX ] + pResi[ uiX ], clipbd );
 #endif
       pRecIPred[ uiX ] = pReco[ uiX ];
+
     }
 #if DEBUG_STRING
     if (bDebugReco)
@@ -673,7 +767,7 @@ TDecCu::xReconIntraQT( TComDataCU* pcCU, UInt uiDepth )
 
     do
     {
-      xIntraRecQT( m_ppcYuvReco[uiDepth], m_ppcYuvReco[uiDepth], m_ppcYuvResi[uiDepth], chanType, tuRecurseWithPU );
+      xIntraRecQT( m_ppcYuvReco[uiDepth], m_ppcYuvReco[uiDepth], m_ppcYuvResi[uiDepth], chanType, tuRecurseWithPU, m_ppcOrigYuv[uiDepth] );
     } while (tuRecurseWithPU.nextSection(tuRecurseCU));
   }
 }
@@ -695,7 +789,8 @@ TDecCu::xIntraRecQT(TComYuv*    pcRecoYuv,
                     TComYuv*    pcPredYuv,
                     TComYuv*    pcResiYuv,
                     const ChannelType chType,
-                    TComTU     &rTu)
+                    TComTU     &rTu,
+				    TComYuv*	pcOrgYuv)
 {
   UInt uiTrDepth    = rTu.GetTransformDepthRel();
   TComDataCU *pcCU  = rTu.getCU();
@@ -705,14 +800,14 @@ TDecCu::xIntraRecQT(TComYuv*    pcRecoYuv,
   {
     if (isLuma(chType))
     {
-      xIntraRecBlk( pcRecoYuv, pcPredYuv, pcResiYuv, COMPONENT_Y,  rTu );
+      xIntraRecBlk( pcRecoYuv, pcPredYuv, pcResiYuv, COMPONENT_Y,  rTu, pcOrgYuv );
     }
     else
     {
       const UInt numValidComp=getNumberValidComponents(rTu.GetChromaFormat());
       for(UInt compID=COMPONENT_Cb; compID<numValidComp; compID++)
       {
-        xIntraRecBlk( pcRecoYuv, pcPredYuv, pcResiYuv, ComponentID(compID), rTu );
+        xIntraRecBlk( pcRecoYuv, pcPredYuv, pcResiYuv, ComponentID(compID), rTu, pcOrgYuv );
       }
     }
   }
@@ -721,7 +816,7 @@ TDecCu::xIntraRecQT(TComYuv*    pcRecoYuv,
     TComTURecurse tuRecurseChild(rTu, false);
     do
     {
-      xIntraRecQT( pcRecoYuv, pcPredYuv, pcResiYuv, chType, tuRecurseChild );
+      xIntraRecQT( pcRecoYuv, pcPredYuv, pcResiYuv, chType, tuRecurseChild, pcOrgYuv );
     } while (tuRecurseChild.nextSection(rTu));
   }
 }

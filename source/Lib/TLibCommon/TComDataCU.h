@@ -124,6 +124,10 @@ private:
   TComMvField   m_cMvFieldC;                            ///< motion vector of position C
   TComMv        m_cMvPred;                              ///< motion vector predictor
 
+#if ApplyIntraFCN
+  Bool*        m_pbIsNetwork;
+#endif
+
   // -------------------------------------------------------------------------------------------------------------------
   // coding tool information
   // -------------------------------------------------------------------------------------------------------------------
@@ -134,6 +138,7 @@ private:
   Bool          m_bIsMergeAMP;
 #endif
   UChar*        m_puhIntraDir[MAX_NUM_CHANNEL_TYPE];
+  UChar*			m_nnIsBestFlag[MAX_NUM_CHANNEL_TYPE];
   UChar*        m_puhInterDir;                          ///< array of inter directions
   SChar*        m_apiMVPIdx[NUM_REF_PIC_LIST_01];       ///< array of motion vector predictor candidates
   SChar*        m_apiMVPNum[NUM_REF_PIC_LIST_01];       ///< array of number of possible motion vectors predictors
@@ -314,6 +319,12 @@ public:
   // member functions for coding tool information
   // -------------------------------------------------------------------------------------------------------------------
 
+#if ApplyIntraFCN
+  Bool*        getIsNetworkFlag() { return m_pbIsNetwork; }
+  Bool         getIsNetworkFlag(const UInt uiIdx) const { return m_pbIsNetwork[uiIdx]; }
+  Void          setIsNetworkFlagSubParts(Bool index, UInt absPartIdx, UInt depth);
+#endif
+
   Bool*         getMergeFlag                  ( )                                                          { return m_pbMergeFlag;                      }
   Bool          getMergeFlag                  ( UInt uiIdx ) const                                         { return m_pbMergeFlag[uiIdx];               }
   Void          setMergeFlag                  ( UInt uiIdx, Bool b )                                       { m_pbMergeFlag[uiIdx] = b;                  }
@@ -334,10 +345,16 @@ public:
   UChar*        getIntraDir                   ( const ChannelType channelType )                   const    { return m_puhIntraDir[channelType];         }
   UChar         getIntraDir                   ( const ChannelType channelType, const UInt uiIdx ) const    { return m_puhIntraDir[channelType][uiIdx];  }
 
+  UChar*         getNnFlag(const ChannelType channelType)                     const    { return m_nnIsBestFlag[channelType]; }
+  UChar          getNnFlag(const ChannelType channelType, const UInt uiIdx)   const    { return m_nnIsBestFlag[channelType][uiIdx]; }
+
   Void          setIntraDirSubParts           ( const ChannelType channelType,
                                                 const UInt uiDir,
                                                 const UInt uiAbsPartIdx,
                                                 const UInt uiDepth );
+
+  Void			setNnBestModeFlag(const ChannelType channelType, const UInt nnBestFl, const UInt uiAbsPartIdx, const UInt uiDepth);
+
 
   UChar*        getInterDir                   ( )                                                          { return m_puhInterDir;                      }
   UChar         getInterDir                   ( UInt uiIdx ) const                                         { return m_puhInterDir[uiIdx];               }
@@ -449,6 +466,8 @@ public:
 
   Void          getAllowedChromaDir           ( UInt uiAbsPartIdx, UInt* uiModeList ) const;
   Void          getIntraDirPredictor          ( UInt uiAbsPartIdx, Int uiIntraDirPred[NUM_MOST_PROBABLE_MODES], const ComponentID compID, Int* piMode = NULL ) const;
+
+  Void			getNnBestModeFlag(UInt uiAbsPartIdx, Int flag[2], ComponentID compID, Int mode[2]);
 
   // -------------------------------------------------------------------------------------------------------------------
   // member functions for SBAC context

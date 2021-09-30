@@ -68,8 +68,17 @@ TComDataCU::TComDataCU()
   {
     m_puhIntraDir[i]     = NULL;
   }
+  for (UInt i = 0; i < MAX_NUM_CHANNEL_TYPE; i++)
+  {
+	  m_nnIsBestFlag[i] = NULL;
+  }
+
   m_puhInterDir        = NULL;
   m_puhTrIdx           = NULL;
+
+#if ApplyIntraFCN
+  m_pbIsNetwork = NULL;
+#endif
 
   for (UInt comp=0; comp<MAX_NUM_COMPONENT; comp++)
   {
@@ -141,7 +150,16 @@ Void TComDataCU::create( ChromaFormat chromaFormatIDC, UInt uiNumPartition, UInt
     {
       m_puhIntraDir[ch] = (UChar* )xMalloc(UChar,  uiNumPartition);
     }
+	for (UInt ch = 0; ch < MAX_NUM_CHANNEL_TYPE; ch++)
+	{
+		m_nnIsBestFlag[ch] = (UChar*)xMalloc(UChar, uiNumPartition);
+	}
+
     m_puhInterDir        = (UChar* )xMalloc(UChar,  uiNumPartition);
+
+#if ApplyIntraFCN
+	m_pbIsNetwork = (Bool*)xMalloc(Bool, uiNumPartition);
+#endif
 
     m_puhTrIdx           = (UChar* )xMalloc(UChar,  uiNumPartition);
 
@@ -284,6 +302,20 @@ Void TComDataCU::destroy()
       xFree(m_puhIntraDir[ch]);
       m_puhIntraDir[ch] = NULL;
     }
+
+#if ApplyIntraFCN
+	if (m_pbIsNetwork)
+	{
+		xFree(m_pbIsNetwork);
+		m_pbIsNetwork = NULL;
+	}
+#endif
+
+	for (UInt ch = 0; ch < MAX_NUM_CHANNEL_TYPE; ch++)
+	{
+		xFree(m_nnIsBestFlag[ch]);
+		m_nnIsBestFlag[ch] = NULL;
+	}
 
     if ( m_puhTrIdx )
     {
@@ -478,8 +510,17 @@ Void TComDataCU::initCtu( TComPic* pcPic, UInt ctuRsAddr )
   {
     memset( m_puhIntraDir[ch] , ((ch==0) ? DC_IDX : 0),   m_uiNumPartition * sizeof( *(m_puhIntraDir[ch]) ) );
   }
+  for (int ch = 0; ch < MAX_NUM_CHANNEL_TYPE; ch++)
+  {
+	  memset(m_nnIsBestFlag[ch], 0, m_uiNumPartition*sizeof(*(m_nnIsBestFlag[ch])) );
+  }
+
   memset( m_puhInterDir       , 0,                        m_uiNumPartition * sizeof( *m_puhInterDir ) );
   memset( m_pbIPCMFlag        , false,                    m_uiNumPartition * sizeof( *m_pbIPCMFlag ) );
+
+#if ApplyIntraFCN
+  memset(m_pbIsNetwork, false, m_uiNumPartition * sizeof(*m_pbIsNetwork));
+#endif
 
   const UInt numCoeffY    = maxCUWidth*maxCUHeight;
   for (UInt comp=0; comp<MAX_NUM_COMPONENT; comp++)
@@ -592,6 +633,15 @@ Void TComDataCU::initEstData( const UInt uiDepth, const Int qp, const Bool bTran
       m_puhIntraDir[ch][ui] = ((ch==0) ? DC_IDX : 0);
     }
 
+#if ApplyIntraFCN
+	m_pbIsNetwork[ui] = false;
+#endif
+
+	for (UInt ch = 0; ch < MAX_NUM_CHANNEL_TYPE; ch++)
+	{
+		m_nnIsBestFlag[ch][ui] = 0;
+	}
+
     m_puhInterDir[ui] = 0;
     for (UInt comp=0; comp<MAX_NUM_COMPONENT; comp++)
     {
@@ -653,6 +703,15 @@ Void TComDataCU::initSubCU( TComDataCU* pcCU, UInt uiPartUnitIdx, UInt uiDepth, 
   for (UInt ch=0; ch<MAX_NUM_CHANNEL_TYPE; ch++)
   {
     memset( m_puhIntraDir[ch],  ((ch==0) ? DC_IDX : 0), iSizeInUchar );
+  }
+
+#if ApplyIntraFCN
+  memset(m_pbIsNetwork, 0, iSizeInBool);
+#endif
+
+  for (UInt ch = 0; ch<MAX_NUM_CHANNEL_TYPE; ch++)
+  {
+	  memset(m_nnIsBestFlag[ch], 0, iSizeInUchar);
   }
 
   memset( m_puhInterDir,        0, iSizeInUchar );
@@ -755,6 +814,14 @@ Void TComDataCU::copySubCU( TComDataCU* pcCU, UInt uiAbsPartIdx )
   for (UInt ch=0; ch<MAX_NUM_CHANNEL_TYPE; ch++)
   {
     m_puhIntraDir[ch]   = pcCU->getIntraDir(ChannelType(ch)) + uiPart;
+  }
+#if ApplyIntraFCN
+  m_pbIsNetwork = pcCU->getIsNetworkFlag() + uiPart;
+#endif
+
+  for (UInt ch = 0; ch < MAX_NUM_CHANNEL_TYPE; ch++)
+  {
+	  m_nnIsBestFlag[ch] = pcCU->getNnFlag(ChannelType(ch)) + uiPart;
   }
 
   m_puhInterDir         = pcCU->getInterDir()         + uiPart;
@@ -873,6 +940,8 @@ Void TComDataCU::copyPartFrom( TComDataCU* pcCU, UInt uiPartUnitIdx, UInt uiDept
   Int iSizeInBool   = sizeof( Bool  ) * uiNumPartition;
 
   Int sizeInChar  = sizeof( SChar ) * uiNumPartition;
+  //Int sizeInUint = sizeof(UInt)* uiNumPartition;
+
   memcpy( m_skipFlag   + uiOffset, pcCU->getSkipFlag(),       sizeof( *m_skipFlag )   * uiNumPartition );
   memcpy( m_phQP       + uiOffset, pcCU->getQP(),             sizeInChar                        );
   memcpy( m_pePartSize + uiOffset, pcCU->getPartitionSize(),  sizeof( *m_pePartSize ) * uiNumPartition );
@@ -885,6 +954,14 @@ Void TComDataCU::copyPartFrom( TComDataCU* pcCU, UInt uiPartUnitIdx, UInt uiDept
   for (UInt ch=0; ch<numValidChan; ch++)
   {
     memcpy( m_puhIntraDir[ch]   + uiOffset, pcCU->getIntraDir(ChannelType(ch)), iSizeInUchar );
+  }
+#if ApplyIntraFCN
+  memcpy(m_pbIsNetwork + uiOffset, pcCU->getIsNetworkFlag(), iSizeInBool);
+#endif
+
+  for (UInt ch = 0; ch < numValidChan; ch++)
+  {
+	  memcpy(m_nnIsBestFlag[ch] + uiOffset, pcCU->getNnFlag(ChannelType(ch)), iSizeInUchar);
   }
 
   memcpy( m_puhInterDir         + uiOffset, pcCU->getInterDir(),          iSizeInUchar );
@@ -955,7 +1032,7 @@ Void TComDataCU::copyToPic( UChar uhDepth )
   Int iSizeInUchar  = sizeof( UChar ) * m_uiNumPartition;
   Int iSizeInBool   = sizeof( Bool  ) * m_uiNumPartition;
   Int sizeInChar  = sizeof( SChar ) * m_uiNumPartition;
-
+  //Int sizeInUint = sizeof(UInt)* m_uiNumPartition;
   memcpy( pCtu->getSkipFlag() + m_absZIdxInCtu, m_skipFlag, sizeof( *m_skipFlag ) * m_uiNumPartition );
 
   memcpy( pCtu->getQP() + m_absZIdxInCtu, m_phQP, sizeInChar  );
@@ -969,6 +1046,15 @@ Void TComDataCU::copyToPic( UChar uhDepth )
   for (UInt ch=0; ch<numValidChan; ch++)
   {
     memcpy( pCtu->getIntraDir(ChannelType(ch)) + m_absZIdxInCtu, m_puhIntraDir[ch], iSizeInUchar);
+  }
+
+#if ApplyIntraFCN
+  memcpy(pCtu->getIsNetworkFlag() + m_absZIdxInCtu, m_pbIsNetwork, iSizeInBool);
+#endif
+
+  for (UInt ch = 0; ch < numValidChan; ch++)
+  {
+	  memcpy(pCtu->getNnFlag(ChannelType(ch)) + m_absZIdxInCtu, m_nnIsBestFlag[ch], iSizeInUchar);
   }
 
   memcpy( pCtu->getInterDir()          + m_absZIdxInCtu, m_puhInterDir,         iSizeInUchar );
@@ -1063,6 +1149,8 @@ const TComDataCU* TComDataCU::getPUAbove( UInt& uiAPartUnitIdx,
   UInt uiAbsZorderCUIdx   = g_auiZscanToRaster[m_absZIdxInCtu];
   const UInt numPartInCtuWidth = m_pcPic->getNumPartInCtuWidth();
 
+
+
   if ( !RasterAddress::isZeroRow( uiAbsPartIdx, numPartInCtuWidth ) )
   {
     uiAPartUnitIdx = g_auiRasterToZscan[ uiAbsPartIdx - numPartInCtuWidth ];
@@ -1093,23 +1181,23 @@ const TComDataCU* TComDataCU::getPUAbove( UInt& uiAPartUnitIdx,
 
 const TComDataCU* TComDataCU::getPUAboveLeft( UInt& uiALPartUnitIdx, UInt uiCurrPartUnitIdx, Bool bEnforceSliceRestriction ) const
 {
-  UInt uiAbsPartIdx       = g_auiZscanToRaster[uiCurrPartUnitIdx];
-  UInt uiAbsZorderCUIdx   = g_auiZscanToRaster[m_absZIdxInCtu];
+  UInt uiAbsPartIdx       = g_auiZscanToRaster[uiCurrPartUnitIdx]; //tu in ctu
+  UInt uiAbsZorderCUIdx   = g_auiZscanToRaster[m_absZIdxInCtu]; //cu in ctu
   const UInt numPartInCtuWidth = m_pcPic->getNumPartInCtuWidth();
 
-  if ( !RasterAddress::isZeroCol( uiAbsPartIdx, numPartInCtuWidth ) )
+  if ( !RasterAddress::isZeroCol( uiAbsPartIdx, numPartInCtuWidth ) ) //tu is at first column of the current ctu, or not
   {
-    if ( !RasterAddress::isZeroRow( uiAbsPartIdx, numPartInCtuWidth ) )
+    if ( !RasterAddress::isZeroRow( uiAbsPartIdx, numPartInCtuWidth ) ) //tu is at first row of the current ctu, or not
     {
       uiALPartUnitIdx = g_auiRasterToZscan[ uiAbsPartIdx - numPartInCtuWidth - 1 ];
-      if ( RasterAddress::isEqualRowOrCol( uiAbsPartIdx, uiAbsZorderCUIdx, numPartInCtuWidth ) )
+      if ( RasterAddress::isEqualRowOrCol( uiAbsPartIdx, uiAbsZorderCUIdx, numPartInCtuWidth ) ) //when tu in ctu is equal to cu in ctu
       {
-        return m_pcPic->getCtu( getCtuRsAddr() );
+        return m_pcPic->getCtu( getCtuRsAddr() ); //return this current ctu
       }
       else
-      {
+	  {
         uiALPartUnitIdx -= m_absZIdxInCtu;
-        return this;
+        return this; //return this current cu
       }
     }
     uiALPartUnitIdx = g_auiRasterToZscan[ uiAbsPartIdx + getPic()->getNumPartitionsInCtu() - numPartInCtuWidth - 1 ];
@@ -1184,9 +1272,10 @@ const TComDataCU* TComDataCU::getPUBelowLeft(UInt& uiBLPartUnitIdx,  UInt uiCurr
 
 const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCurrPartUnitIdx, UInt uiPartUnitOffset, Bool bEnforceSliceRestriction) const
 {
-  UInt uiAbsPartIdxRT     = g_auiZscanToRaster[uiCurrPartUnitIdx];
+  UInt uiAbsPartIdxRT     = g_auiZscanToRaster[uiCurrPartUnitIdx]; // 1 3 9 11
+
   UInt uiAbsZorderCUIdx   = g_auiZscanToRaster[ m_absZIdxInCtu ] + (m_puhWidth[0] / m_pcPic->getMinCUWidth()) - 1;
-  const UInt numPartInCtuWidth = m_pcPic->getNumPartInCtuWidth();
+  const UInt numPartInCtuWidth = m_pcPic->getNumPartInCtuWidth(); //is 4 when ctu is 16
 
   if( ( m_pcPic->getCtu(m_ctuRsAddr)->getCUPelX() + g_auiRasterToPelX[uiAbsPartIdxRT] + (m_pcPic->getPicSym()->getMinCUHeight() * uiPartUnitOffset)) >= m_pcSlice->getSPS()->getPicWidthInLumaSamples() )
   {
@@ -1194,11 +1283,11 @@ const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCur
     return NULL;
   }
 
-  if ( RasterAddress::lessThanCol( uiAbsPartIdxRT, numPartInCtuWidth - uiPartUnitOffset, numPartInCtuWidth ) )
+  if ( RasterAddress::lessThanCol( uiAbsPartIdxRT, numPartInCtuWidth - uiPartUnitOffset, numPartInCtuWidth ) ) // to identify whether the wanted right above pixel is at the left side of the right most pixel in the ctu
   {
-    if ( !RasterAddress::isZeroRow( uiAbsPartIdxRT, numPartInCtuWidth ) )
+    if ( !RasterAddress::isZeroRow( uiAbsPartIdxRT, numPartInCtuWidth ) ) // tu is not at the first row of ctu, the wanted pixel can be found in the current ctu
     {
-      if ( uiCurrPartUnitIdx > g_auiRasterToZscan[ uiAbsPartIdxRT - numPartInCtuWidth + uiPartUnitOffset ] )
+      if ( uiCurrPartUnitIdx > g_auiRasterToZscan[ uiAbsPartIdxRT - numPartInCtuWidth + uiPartUnitOffset ] ) // make sure the wanted right above pixel is already processed, use zigzag to check it
       {
         uiARPartUnitIdx = g_auiRasterToZscan[ uiAbsPartIdxRT - numPartInCtuWidth + uiPartUnitOffset ];
         if ( RasterAddress::isEqualRowOrCol( uiAbsPartIdxRT, uiAbsZorderCUIdx, numPartInCtuWidth ) )
@@ -1211,6 +1300,7 @@ const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCur
           return this;
         }
       }
+
       uiARPartUnitIdx = MAX_UINT;
       return NULL;
     }
@@ -1220,10 +1310,10 @@ const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCur
     {
       return NULL;
     }
-    return m_pCtuAbove;
+    return m_pCtuAbove; // tu is at the first row of ctu
   }
 
-  if ( !RasterAddress::isZeroRow( uiAbsPartIdxRT, numPartInCtuWidth ) )
+  if ( !RasterAddress::isZeroRow( uiAbsPartIdxRT, numPartInCtuWidth ) ) //if at the right side of the current ctu, and also not first row of the current ctu, this wanted pixel has no chance to be alreayd processed
   {
     uiARPartUnitIdx = MAX_UINT;
     return NULL;
@@ -1234,7 +1324,7 @@ const TComDataCU* TComDataCU::getPUAboveRight(UInt&  uiARPartUnitIdx, UInt uiCur
   {
     return NULL;
   }
-  return m_pCtuAboveRight;
+  return m_pCtuAboveRight; //if at the right side of the current ctu, but it is first row of the current ctu, it depends on ctuaboveright exists or not
 }
 
 /** Get left QpMinCu
@@ -1372,23 +1462,50 @@ Bool TComDataCU::isLosslessCoded(UInt absPartIdx) const
 */
 Void TComDataCU::getAllowedChromaDir( UInt uiAbsPartIdx, UInt uiModeList[NUM_CHROMA_MODE] ) const
 {
-  uiModeList[0] = PLANAR_IDX;
-  uiModeList[1] = VER_IDX;
-  uiModeList[2] = HOR_IDX;
-  uiModeList[3] = DC_IDX;
-  uiModeList[4] = DM_CHROMA_IDX;
-  assert(4<NUM_CHROMA_MODE);
+	//int flag = getNnFlag(CHANNEL_TYPE_LUMA, uiAbsPartIdx);
+	//check1226 << flag << endl;
 
-  UInt uiLumaMode = getIntraDir( CHANNEL_TYPE_LUMA, uiAbsPartIdx );
+	if (false)
+	{
+		uiModeList[0] = PLANAR_IDX;
+		uiModeList[1] = VER_IDX;
+		uiModeList[2] = HOR_IDX;
+		uiModeList[3] = 34;
+		uiModeList[4] = DM_CHROMA_IDX;
+	}
+	else
+	{
 
-  for( Int i = 0; i < NUM_CHROMA_MODE - 1; i++ )
-  {
-    if( uiLumaMode == uiModeList[i] )
-    {
-      uiModeList[i] = 34; // VER+8 mode
-      break;
-    }
-  }
+		uiModeList[0] = PLANAR_IDX;
+		uiModeList[1] = VER_IDX;
+		uiModeList[2] = HOR_IDX;
+		uiModeList[3] = DC_IDX;
+		uiModeList[4] = DM_CHROMA_IDX;
+		assert(4 < NUM_CHROMA_MODE);
+
+		UInt uiLumaMode = getIntraDir(CHANNEL_TYPE_LUMA, uiAbsPartIdx);
+
+		for (Int i = 0; i < NUM_CHROMA_MODE - 1; i++)
+		{
+			if (uiLumaMode == uiModeList[i])
+			{
+				uiModeList[i] = 34; // VER+8 mode
+				break;
+			}
+		}
+
+		if (false)
+		{
+			uiModeList[0] = PLANAR_IDX;
+			uiModeList[1] = VER_IDX;
+			uiModeList[2] = HOR_IDX;
+			uiModeList[3] = DC_IDX;
+			uiModeList[4] = DM_CHROMA_IDX;
+		}
+
+	}
+
+
 }
 
 /** Get most probable intra modes
@@ -1403,6 +1520,7 @@ Void TComDataCU::getIntraDirPredictor( UInt uiAbsPartIdx, Int uiIntraDirPred[NUM
   UInt        LeftPartIdx  = MAX_UINT;
   UInt        AbovePartIdx = MAX_UINT;
   Int         iLeftIntraDir, iAboveIntraDir;
+
   const TComSPS *sps=getSlice()->getSPS();
   const UInt partsPerMinCU = 1<<(2*(sps->getMaxTotalCUDepth() - sps->getLog2DiffMaxMinCodingBlockSize()));
 
@@ -1428,6 +1546,7 @@ Void TComDataCU::getIntraDirPredictor( UInt uiAbsPartIdx, Int uiIntraDirPred[NUM
 
   if (isChroma(chType))
   {
+	cout << " exe " << endl;
     if (iLeftIntraDir  == DM_CHROMA_IDX)
     {
       iLeftIntraDir  = pcCULeft-> getIntraDir( CHANNEL_TYPE_LUMA, LeftPartIdx  );
@@ -1439,48 +1558,91 @@ Void TComDataCU::getIntraDirPredictor( UInt uiAbsPartIdx, Int uiIntraDirPred[NUM
   }
 
   assert (2<NUM_MOST_PROBABLE_MODES);
-  if(iLeftIntraDir == iAboveIntraDir)
-  {
-    if( piMode )
-    {
-      *piMode = 1;
-    }
 
-    if (iLeftIntraDir > 1) // angular modes
-    {
-      uiIntraDirPred[0] = iLeftIntraDir;
-      uiIntraDirPred[1] = ((iLeftIntraDir + 29) % 32) + 2;
-      uiIntraDirPred[2] = ((iLeftIntraDir - 1 ) % 32) + 2;
-    }
-    else //non-angular
-    {
-      uiIntraDirPred[0] = PLANAR_IDX;
-      uiIntraDirPred[1] = DC_IDX;
-      uiIntraDirPred[2] = VER_IDX;
-    }
+  if (false)
+  {
+	  if (piMode)
+	  {
+		  *piMode = 1;
+	  }
+	  uiIntraDirPred[0] = PLANAR_IDX;
+	  uiIntraDirPred[1] = DC_IDX;
+	  uiIntraDirPred[2] = VER_IDX;
   }
   else
   {
-    if( piMode )
-    {
-      *piMode = 2;
-    }
-    uiIntraDirPred[0] = iLeftIntraDir;
-    uiIntraDirPred[1] = iAboveIntraDir;
 
-    if (iLeftIntraDir && iAboveIntraDir ) //both modes are non-planar
-    {
-      uiIntraDirPred[2] = PLANAR_IDX;
-    }
-    else
-    {
-      uiIntraDirPred[2] =  (iLeftIntraDir+iAboveIntraDir)<2? VER_IDX : DC_IDX;
-    }
+	  if (iLeftIntraDir == iAboveIntraDir)
+	  {
+		  if (piMode)
+		  {
+			  *piMode = 1;
+		  }
+
+		  if (iLeftIntraDir > 1) // angular modes
+		  {
+			  uiIntraDirPred[0] = iLeftIntraDir;
+			  uiIntraDirPred[1] = ((iLeftIntraDir + 29) % 32) + 2;
+			  uiIntraDirPred[2] = ((iLeftIntraDir - 1) % 32) + 2;
+		  }
+		  else //non-angular
+		  {
+			  uiIntraDirPred[0] = PLANAR_IDX;
+			  uiIntraDirPred[1] = DC_IDX;
+			  uiIntraDirPred[2] = VER_IDX;
+		  }
+	  }
+	  else
+	  {
+		  if (piMode)
+		  {
+			  *piMode = 2;  
+		  }
+		  uiIntraDirPred[0] = iLeftIntraDir;
+		  uiIntraDirPred[1] = iAboveIntraDir;
+
+		  if (iLeftIntraDir && iAboveIntraDir) //both modes are non-planar
+		  {
+			  uiIntraDirPred[2] = PLANAR_IDX;
+		  }
+		  else
+		  {
+			  uiIntraDirPred[2] = (iLeftIntraDir + iAboveIntraDir)<2 ? VER_IDX : DC_IDX;
+		  }
+	  }
+
   }
+  
+
   for (UInt i=0; i<NUM_MOST_PROBABLE_MODES; i++)
   {
     assert(uiIntraDirPred[i] < 35);
   }
+}
+
+Void TComDataCU::getNnBestModeFlag(UInt uiAbsPartIdx, Int flag[2], ComponentID compID, Int mode[2])
+{
+	UInt        LeftPartIdx = MAX_UINT;
+	UInt        AbovePartIdx = MAX_UINT;
+	Int        leftNnFlag, aboveNnFlag;
+	Int         iLeftIntraDir, iAboveIntraDir;
+
+	const ChannelType chType = toChannelType(compID);
+
+	const TComDataCU *pcCULeft = getPULeft(LeftPartIdx, m_absZIdxInCtu + uiAbsPartIdx);
+	leftNnFlag = pcCULeft ? (pcCULeft->isIntra(LeftPartIdx) ? pcCULeft->getNnFlag(chType, LeftPartIdx) : 0) : 0;
+	iLeftIntraDir = pcCULeft ? (pcCULeft->isIntra(LeftPartIdx) ? pcCULeft->getIntraDir(chType, LeftPartIdx) : DC_IDX) : DC_IDX;
+
+	const TComDataCU *pcCUAbove = getPUAbove(AbovePartIdx, m_absZIdxInCtu + uiAbsPartIdx, true, true);
+	aboveNnFlag = pcCUAbove ? (pcCUAbove->isIntra(AbovePartIdx) ? pcCUAbove->getNnFlag(chType, AbovePartIdx) : 0) : 0;
+	iAboveIntraDir = pcCUAbove ? (pcCUAbove->isIntra(AbovePartIdx) ? pcCUAbove->getIntraDir(chType, AbovePartIdx) : DC_IDX) : DC_IDX;
+
+	flag[0] = leftNnFlag;
+	flag[1] = aboveNnFlag;
+
+	mode[0] = iLeftIntraDir;
+	mode[1] = iAboveIntraDir;
+
 }
 
 UInt TComDataCU::getCtxSplitFlag( UInt uiAbsPartIdx, UInt uiDepth ) const
@@ -1694,6 +1856,19 @@ Void TComDataCU::setIntraDirSubParts( const ChannelType channelType, const UInt 
 {
   UInt numPart = m_pcPic->getNumPartitionsInCtu() >> (depth << 1);
   memset( m_puhIntraDir[channelType] + absPartIdx, dir,sizeof(UChar)*numPart );
+}
+#if ApplyIntraFCN
+Void TComDataCU::setIsNetworkFlagSubParts(Bool index, UInt absPartIdx, UInt depth)
+{
+	UInt numPart = m_pcPic->getNumPartitionsInCtu() >> (depth << 1);
+	memset(m_pbIsNetwork + absPartIdx, index, sizeof(Bool)*numPart);
+}
+#endif
+
+Void TComDataCU::setNnBestModeFlag(const ChannelType channelType, const UInt flag, const UInt absPartIdx, const UInt depth)
+{
+	UInt numPart = m_pcPic->getNumPartitionsInCtu() >> (depth << 1);
+	memset(m_nnIsBestFlag[channelType] + absPartIdx, flag, sizeof(UChar)*numPart);
 }
 
 template<typename T>

@@ -40,6 +40,8 @@
 #include <time.h>
 #include "TAppDecTop.h"
 
+#include "TLibCommon/TComTensorflow.h"
+
 ofstream decodeTime("decodeTime.txt", ios::app);
 
 //! \ingroup TAppDecoder
@@ -77,8 +79,15 @@ int main(int argc, char* argv[])
   Double dResult;
   clock_t lBefore = clock();
 
+  //load_pb();
+  //new_session();
+  NNPredict predict;
+  predict.new_session();
+
   // call decoding function
   cTAppDecTop.decode();
+
+  //close_session();
 
   if (cTAppDecTop.getNumberOfChecksumErrorsDetected() != 0)
   {
@@ -91,6 +100,7 @@ int main(int argc, char* argv[])
   printf("\n Total Time: %12.3f sec.\n", dResult);
 
   decodeTime << dResult << endl;
+  
 
   // destroy application decoder class
   cTAppDecTop.destroy();

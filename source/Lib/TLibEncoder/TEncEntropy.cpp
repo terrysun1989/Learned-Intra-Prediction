@@ -45,6 +45,9 @@
 static const Bool bDebugPredEnabled = DebugOptionList::DebugPred.getInt()!=0;
 #endif
 
+extern bool checkbit;
+extern int c;
+
 //! \ingroup TLibEncoder
 //! \{
 
@@ -429,6 +432,7 @@ Void TEncEntropy::encodePredInfo( TComDataCU* pcCU, UInt uiAbsPartIdx )
   if( pcCU->isIntra( uiAbsPartIdx ) )                                 // If it is Intra mode, encode intra prediction mode.
   {
     encodeIntraDirModeLuma  ( pcCU, uiAbsPartIdx,true );
+
     if (pcCU->getPic()->getChromaFormat()!=CHROMA_400)
     {
       encodeIntraDirModeChroma( pcCU, uiAbsPartIdx );

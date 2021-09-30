@@ -59,6 +59,10 @@
 
 #define NUM_INTRA_PREDICT_CTX         1       ///< number of context models for intra prediction
 
+#if ApplyIntraFCN
+#define NUM_IsNewworkMode_CTX         1  
+#endif
+
 #define NUM_CHROMA_PRED_CTX           2       ///< number of context models for intra prediction (chroma)
 #define NUM_INTER_DIR_CTX             5       ///< number of context models for inter prediction direction
 #define NUM_MV_RES_CTX                2       ///< number of context models for motion vector difference
@@ -231,6 +235,24 @@ INIT_INTRA_PRED_MODE[NUMBER_OF_SLICE_TYPES][NUM_INTRA_PREDICT_CTX] =
   { 183, },
   { 154, },
   { 184, },
+};
+
+#if ApplyIntraFCN
+static const UChar
+INIT_IsNetworkMode_MODE[NUMBER_OF_SLICE_TYPES][NUM_IsNewworkMode_CTX] =
+{
+  { 154,},
+  { 154,},
+  { 154,},
+};
+#endif
+
+static const UChar
+INIT_INTRA_NN_MODE[NUMBER_OF_SLICE_TYPES][NUM_INTRA_PREDICT_CTX] =
+{
+	{ 183, },
+	{ 154, },
+	{ 154, },
 };
 
 static const UChar

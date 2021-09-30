@@ -47,6 +47,53 @@
 //! \ingroup TLibCommon
 //! \{
 
+// for nn intra
+
+#define LINUX 0
+
+#define ApplyIntraFCN true
+#define UseApplyIntraFCN false
+#define UseTip4 true
+
+#define nnStrengthenNnModeFlag true
+
+#define NUM_MODE 35
+
+#define inria_tu8 0
+#define inria_tu16 1
+#define inria_tu32 1
+
+#define LIGHT_MODEL 1
+
+#define inria 0
+
+#define nnTuSizeChroma 32 // for chroma, size <= nnTuSizeChroma
+#define nnTuSizeChromaMin 4
+
+#define doNxN 1 // do PU NxN
+#define nnTuSize 32// use nn for the size <= nnTuSize
+#define MULTI_LANE 8
+//#define MAX_MULTI_LANE 8
+
+#define onlyNnMode 0
+#define tip 0 //chroma follows luma
+
+#if tip
+	#define nnUseNnModeChromaFlag true
+#else
+	#define nnUseNnModeChromaFlag false
+#endif
+
+#if (NUM_MODE==1)&&(tip==0)
+	#define oneNnUseMpm 1
+#else
+	#define oneNnUseMpm 0 //tip disable this flag
+#endif
+
+#define nnDo34 0
+#define PRECISION float
+#define TEST_DATA_DEC 0
+
 // ====================================================================================================================
 // Debugging
 // ====================================================================================================================

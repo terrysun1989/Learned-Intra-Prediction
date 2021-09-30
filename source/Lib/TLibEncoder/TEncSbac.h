@@ -178,6 +178,20 @@ private:
   ContextModel3DBuffer m_cCUPartSizeSCModel;
   ContextModel3DBuffer m_cCUPredModeSCModel;
   ContextModel3DBuffer m_cCUIntraPredSCModel;
+
+#if ApplyIntraFCN
+  ContextModel3DBuffer m_cCUIsNetworkModeSCModel;
+#endif
+
+  ContextModel3DBuffer m_cCUIntraNnModel;
+  ContextModel3DBuffer m_cCUIntraNnModel8;
+  ContextModel3DBuffer m_cCUIntraNnModel16;
+  ContextModel3DBuffer m_cCUIntraNnModel32;
+  ContextModel3DBuffer m_cCUIntraNnModel64;
+  ContextModel3DBuffer m_cCUIntraNnModelIdx;
+  ContextModel3DBuffer m_cCUIntraNnModelIdx2;
+  ContextModel3DBuffer m_cCUIntraNnModelIdx3;
+  ContextModel3DBuffer m_cCUIntraNnModelIdx4;
   ContextModel3DBuffer m_cCUChromaPredSCModel;
   ContextModel3DBuffer m_cCUDeltaQpSCModel;
   ContextModel3DBuffer m_cCUInterDirSCModel;

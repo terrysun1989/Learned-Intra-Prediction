@@ -40,10 +40,18 @@
 #include "TEncCu.h"
 #include "TEncAnalyze.h"
 #include "TLibCommon/Debug.h"
-
+#include "TLibCommon/TComTU.h"
 #include <cmath>
 #include <algorithm>
 using namespace std;
+
+
+bool checkbit = false;
+extern int tttmode[32400];
+int tttmodeIdx;
+
+extern bool nnEncodeCtuFlag;
+extern bool nnEncodePredFlag;
 
 
 //! \ingroup TLibEncoder
@@ -641,16 +649,60 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
              ((rpcBestCU->getCbf( 0, COMPONENT_Cr ) != 0) && (numberValidComponents > COMPONENT_Cr))  // avoid very complex intra if it is unlikely
             )))
         {
+
+#if ApplyIntraFCN
+			rpcTempCU->setIsNetworkFlagSubParts(false, 0, uiDepth);
+#endif
+
+#if !UseApplyIntraFCN
+			rpcTempCU->setIsNetworkFlagSubParts(true, 0, uiDepth);
+#endif
+
           xCheckRDCostIntra( rpcBestCU, rpcTempCU, SIZE_2Nx2N DEBUG_STRING_PASS_INTO(sDebug) );
-          rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
-          if( uiDepth == sps.getLog2DiffMaxMinCodingBlockSize() )
-          {
-            if( rpcTempCU->getWidth(0) > ( 1 << sps.getQuadtreeTULog2MinSize() ) )
-            {
-              xCheckRDCostIntra( rpcBestCU, rpcTempCU, SIZE_NxN DEBUG_STRING_PASS_INTO(sDebug)   );
-              rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
-            }
-          }
+		  rpcTempCU->initEstData(uiDepth, iQP, bIsLosslessMode);
+
+#if UseApplyIntraFCN
+		  if (rpcTempCU->getCUPelX() > 0 && rpcTempCU->getCUPelY() > 0 && uiWidth <= 32)
+		  {
+			  rpcTempCU->setIsNetworkFlagSubParts(true, 0, uiDepth);
+			  xCheckRDCostIntra(rpcBestCU, rpcTempCU, SIZE_2Nx2N DEBUG_STRING_PASS_INTO(sDebug));
+			  rpcTempCU->initEstData(uiDepth, iQP, bIsLosslessMode);
+		  }
+#endif
+
+#if doNxN
+
+		  {
+			  if (uiDepth == sps.getLog2DiffMaxMinCodingBlockSize())
+			  {
+				  if (rpcTempCU->getWidth(0) > (1 << sps.getQuadtreeTULog2MinSize()))
+				  {
+#if ApplyIntraFCN
+					  rpcTempCU->setIsNetworkFlagSubParts(false, 0, uiDepth);
+#endif
+
+#if !UseApplyIntraFCN
+					  rpcTempCU->setIsNetworkFlagSubParts(true, 0, uiDepth);
+#endif
+
+					  xCheckRDCostIntra(rpcBestCU, rpcTempCU, SIZE_NxN DEBUG_STRING_PASS_INTO(sDebug));
+					  rpcTempCU->initEstData(uiDepth, iQP, bIsLosslessMode);
+
+#if UseApplyIntraFCN
+					  if (rpcTempCU->getCUPelX() > 0 && rpcTempCU->getCUPelY() > 0)
+					  {
+						  rpcTempCU->setIsNetworkFlagSubParts(true, 0, uiDepth);
+						  xCheckRDCostIntra(rpcBestCU, rpcTempCU, SIZE_NxN DEBUG_STRING_PASS_INTO(sDebug));
+						  rpcTempCU->initEstData(uiDepth, iQP, bIsLosslessMode);
+					  }
+#endif
+
+				  }
+			  }
+
+		  }
+#endif
+		  
         }
 
         // test PCM
@@ -978,6 +1030,7 @@ Void TEncCu::xEncodeCU( TComDataCU* pcCU, UInt uiAbsPartIdx, UInt uiDepth )
     return;
   }
 
+
   if( uiDepth <= pps.getMaxCuDQPDepth() && pps.getUseDQP())
   {
     setdQPFlag(true);
@@ -1021,7 +1074,19 @@ Void TEncCu::xEncodeCU( TComDataCU* pcCU, UInt uiAbsPartIdx, UInt uiDepth )
   }
 
   // prediction Info ( Intra : direction mode, Inter : Mv, reference idx )
+
+
+  if ( /* (uiDepth == 1) && */ nnEncodeCtuFlag)
+  {
+	  nnEncodePredFlag = true;
+  }
+  else
+  {
+	  nnEncodePredFlag = false;
+  }
   m_pcEntropyCoder->encodePredInfo( pcCU, uiAbsPartIdx );
+
+  nnEncodePredFlag = false;
 
   // Encode Coefficients
   Bool bCodeDQP = getdQPFlag();
@@ -1378,7 +1443,18 @@ Void TEncCu::xCheckRDCostIntra( TComDataCU *&rpcBestCU,
   m_pcEntropyCoder->encodeSkipFlag ( rpcTempCU, 0,          true );
   m_pcEntropyCoder->encodePredMode( rpcTempCU, 0,          true );
   m_pcEntropyCoder->encodePartSize( rpcTempCU, 0, uiDepth, true );
+
+  if (uiDepth == 1)
+  {
+	  checkbit = true;
+  }
   m_pcEntropyCoder->encodePredInfo( rpcTempCU, 0 );
+
+  if (uiDepth == 1)
+  {
+	  checkbit = false;
+  }
+
   m_pcEntropyCoder->encodeIPCMInfo(rpcTempCU, 0, true );
 
   // Encode Coefficients

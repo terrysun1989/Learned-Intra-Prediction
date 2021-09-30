@@ -38,6 +38,7 @@
 #include "TDecSbac.h"
 #include "TLibCommon/TComTU.h"
 #include "TLibCommon/TComTrQuant.h"
+#include <fstream>
 
 #if RExt__DECODER_DEBUG_BIT_STATISTICS
 #include "TLibCommon/TComCodingStatistics.h"
@@ -54,6 +55,8 @@
 #include "../TLibCommon/Debug.h"
 #endif
 
+int decBlkIdxParse = 0;
+extern double nnBestModeEncodeFlag[32400];
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -71,6 +74,14 @@ TDecSbac::TDecSbac()
 , m_cCUPartSizeSCModel                       ( 1,             1,                      NUM_PART_SIZE_CTX                    , m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUPredModeSCModel                       ( 1,             1,                      NUM_PRED_MODE_CTX                    , m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUIntraPredSCModel                      ( 1,             1,                      NUM_INTRA_PREDICT_CTX                , m_contextModels + m_numContextModels, m_numContextModels)
+#if ApplyIntraFCN
+, m_cCUIsNetworkModeSCModel(1, 1, NUM_IsNewworkMode_CTX, m_contextModels + m_numContextModels, m_numContextModels)
+#endif
+, m_cCUIntraNnModel							 ( 1, 1, NUM_INTRA_PREDICT_CTX, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModelIdx (1, 1, NUM_INTRA_PREDICT_CTX, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModelIdx2(1, 1, NUM_INTRA_PREDICT_CTX, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModelIdx3(1, 1, NUM_INTRA_PREDICT_CTX, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModelIdx4(1, 1, NUM_INTRA_PREDICT_CTX, m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUChromaPredSCModel                     ( 1,             1,                      NUM_CHROMA_PRED_CTX                  , m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUDeltaQpSCModel                        ( 1,             1,                      NUM_DELTA_QP_CTX                     , m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUInterDirSCModel                       ( 1,             1,                      NUM_INTER_DIR_CTX                    , m_contextModels + m_numContextModels, m_numContextModels)
@@ -135,6 +146,14 @@ Void TDecSbac::resetEntropy(TComSlice* pSlice)
   m_cCUPartSizeSCModel.initBuffer                 ( sliceType, qp, (UChar*)INIT_PART_SIZE );
   m_cCUPredModeSCModel.initBuffer                 ( sliceType, qp, (UChar*)INIT_PRED_MODE );
   m_cCUIntraPredSCModel.initBuffer                ( sliceType, qp, (UChar*)INIT_INTRA_PRED_MODE );
+#if ApplyIntraFCN
+  m_cCUIsNetworkModeSCModel.initBuffer(sliceType, qp, (UChar*)INIT_IsNetworkMode_MODE);
+#endif 
+  m_cCUIntraNnModel.initBuffer                    ( sliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModelIdx.initBuffer(sliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModelIdx2.initBuffer(sliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModelIdx3.initBuffer(sliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModelIdx4.initBuffer(sliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
   m_cCUChromaPredSCModel.initBuffer               ( sliceType, qp, (UChar*)INIT_CHROMA_PRED_MODE );
   m_cCUInterDirSCModel.initBuffer                 ( sliceType, qp, (UChar*)INIT_INTER_DIR );
   m_cCUMvdSCModel.initBuffer                      ( sliceType, qp, (UChar*)INIT_MVD );
@@ -649,75 +668,207 @@ Void TDecSbac::parseIntraDirLumaAng  ( TComDataCU* pcCU, UInt absPartIdx, UInt d
 #if RExt__DECODER_DEBUG_BIT_STATISTICS
   const TComCodingStatisticsClassType ctype(STATS__CABAC_BITS__INTRA_DIR_ANG, g_aucConvertToBit[pcCU->getSlice()->getSPS()->getMaxCUWidth()>>depth]+2, CHANNEL_TYPE_LUMA);
 #endif
-  for (j=0;j<partNum;j++)
-  {
-    m_pcTDecBinIf->decodeBin( symbol, m_cCUIntraPredSCModel.get( 0, 0, 0) RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype) );
-    mpmPred[j] = symbol;
-  }
-  for (j=0;j<partNum;j++)
-  {
-    Int preds[NUM_MOST_PROBABLE_MODES] = {-1, -1, -1};
-    pcCU->getIntraDirPredictor(absPartIdx+partOffset*j, preds, COMPONENT_Y);
-    if (mpmPred[j])
-    {
-      m_pcTDecBinIf->decodeBinEP( symbol RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype) );
-      if (symbol)
-      {
-        m_pcTDecBinIf->decodeBinEP( symbol RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype) );
-        symbol++;
-      }
-      intraPredMode = preds[symbol];
-    }
-    else
-    {
-      m_pcTDecBinIf->decodeBinsEP( symbol, 5 RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype) );
-      intraPredMode = symbol;
 
-      //postponed sorting of MPMs (only in remaining branch)
-      if (preds[0] > preds[1])
-      {
-        std::swap(preds[0], preds[1]);
-      }
-      if (preds[0] > preds[2])
-      {
-        std::swap(preds[0], preds[2]);
-      }
-      if (preds[1] > preds[2])
-      {
-        std::swap(preds[1], preds[2]);
-      }
-      for ( UInt i = 0; i < NUM_MOST_PROBABLE_MODES; i++ )
-      {
-        intraPredMode += ( intraPredMode >= preds[i] );
-      }
-    }
-    pcCU->setIntraDirSubParts(CHANNEL_TYPE_LUMA, (UChar)intraPredMode, absPartIdx+partOffset*j, depth );
+#if UseApplyIntraFCN
+  Int Topx = pcCU->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[absPartIdx]];
+  Int Topy = pcCU->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[absPartIdx]];
+  UInt cuDepth = pcCU->getDepth(absPartIdx);
+  //if (mode == SIZE_NxN)
+  //{
+  //  assert(cuDepth == depth - 1);
+  //}
+  //else
+  //{
+  //  assert(cuDepth == depth);
+  //}
+
+
+  if (Topx > 0 && Topy > 0 && pcCU->getDepth(absPartIdx) > 0)
+  {
+#if StatisticDecoderRatio
+	  assert(depth >= 0 && depth <= 4);
+	  numAll[depth]++;
+#endif
+	  m_pcTDecBinIf->decodeBin(symbol, m_cCUIsNetworkModeSCModel.get(0, 0, 0));
+	  if (symbol)
+	  {
+#if StatisticDecoderRatio 
+		  numNet[depth]++;
+#endif
+		  pcCU->setIsNetworkFlagSubParts(true, absPartIdx, cuDepth);
+		  pcCU->setIntraDirSubParts(CHANNEL_TYPE_LUMA, (UChar)PLANAR_IDX, absPartIdx, cuDepth);
+		  return;
+	  }
   }
+  pcCU->setIsNetworkFlagSubParts(false, absPartIdx, cuDepth);
+#endif
+
+  UInt flag[4] = { 0 };
+
+  for (j = 0; j < partNum; j++)
+  {
+	  pcCU->setNnBestModeFlag(CHANNEL_TYPE_LUMA, (UChar)flag[j], absPartIdx + partOffset * j, depth);
+  }
+
+  int size = int(pcCU->getWidth(0));
+  int cu_x = pcCU->getCUPelX();
+  int cu_y = pcCU->getCUPelY();
+
+  Int Topx = pcCU->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[absPartIdx]];
+  Int Topy = pcCU->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[absPartIdx]];
+
+  int uiWidth = int(pcCU->getWidth(absPartIdx)) ;
+
+  Int RightBottom_x = Topx + uiWidth;
+  Int RightBottom_y = Topy + uiWidth;
+  const TComSPS       &sps = *(pcCU->getSlice()->getSPS());
+
+  bool xInside = (RightBottom_x + uiWidth) <= sps.getPicWidthInLumaSamples();
+  bool yInside = (RightBottom_y + uiWidth) <= sps.getPicHeightInLumaSamples();
+
+  //UInt nnBestMode = 0;
+
+  symbol = 0;
+
+	  for (j = 0; j < partNum; j++)
+	  {
+		  if (flag[j] == 0)
+		  {
+			  m_pcTDecBinIf->decodeBin(symbol, m_cCUIntraPredSCModel.get(0, 0, 0) RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype));
+			  mpmPred[j] = symbol;
+		  }
+	  }
+	  for (j = 0; j < partNum; j++)
+	  {
+		  if (flag[j] == 0)
+		  {
+			  Int preds[NUM_MOST_PROBABLE_MODES] = { -1, -1, -1 };
+			  pcCU->getIntraDirPredictor(absPartIdx + partOffset * j, preds, COMPONENT_Y);
+			  if (mpmPred[j])
+			  {
+				  m_pcTDecBinIf->decodeBinEP(symbol RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype));
+				  if (symbol)
+				  {
+					  m_pcTDecBinIf->decodeBinEP(symbol RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype));
+					  symbol++;
+				  }
+				  intraPredMode = preds[symbol];
+			  }
+			  else
+			  {
+				  m_pcTDecBinIf->decodeBinsEP(symbol, 5 RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype));
+				  intraPredMode = symbol;
+
+				  //postponed sorting of MPMs (only in remaining branch)
+				  if (preds[0] > preds[1])
+				  {
+					  std::swap(preds[0], preds[1]);
+				  }
+				  if (preds[0] > preds[2])
+				  {
+					  std::swap(preds[0], preds[2]);
+				  }
+				  if (preds[1] > preds[2])
+				  {
+					  std::swap(preds[1], preds[2]);
+				  }
+				  for (UInt i = 0; i < NUM_MOST_PROBABLE_MODES; i++)
+				  {
+					  intraPredMode += (intraPredMode >= preds[i]);
+				  }
+			  }
+
+
+			  pcCU->setIntraDirSubParts(CHANNEL_TYPE_LUMA, (UChar)intraPredMode, absPartIdx + partOffset * j, depth);
+
+			  int size = 0;
+
+			  if ((pcCU->getWidth(absPartIdx) == 8) && (partNum == 4))
+			  {
+				  size = 4;
+			  }
+			  else if ((pcCU->getWidth(absPartIdx) == 8) && (partNum == 1))
+			  {
+				  size = 8;
+			  }
+			  else if ((pcCU->getWidth(absPartIdx) == 16) && (partNum == 1))
+			  {
+				  size = 16;
+			  }
+			  else if ((pcCU->getWidth(absPartIdx) == 32) && (partNum == 1))
+			  {
+				  size = 32;
+			  }
+			  else
+			  {
+				  size = 64;
+			  }
+
+		  }
+		  else
+		  {
+			  int uiLumaMode = 1;
+			  // set the mode for the usage of chroma
+			  Int uiPreds[NUM_MOST_PROBABLE_MODES] = { -1, -1, -1 };
+			  pcCU->getIntraDirPredictor(absPartIdx + partOffset * j, uiPreds, COMPONENT_Y);
+			  pcCU->setIntraDirSubParts(CHANNEL_TYPE_LUMA, (UChar)(uiLumaMode), absPartIdx + partOffset * j, depth);
+		  }
+
+
+	  }
+
+	  
+
 }
 
 
 Void TDecSbac::parseIntraDirChroma( TComDataCU* pcCU, UInt uiAbsPartIdx, UInt uiDepth )
 {
+
+#if UseApplyIntraFCN
+	if (pcCU->getIsNetworkFlag(uiAbsPartIdx))
+	{
+		pcCU->setIntraDirSubParts(CHANNEL_TYPE_CHROMA, 0, uiAbsPartIdx, uiDepth);
+		return;
+	}
+#endif
+
   UInt uiSymbol;
 #if RExt__DECODER_DEBUG_BIT_STATISTICS
   const TComCodingStatisticsClassType ctype(STATS__CABAC_BITS__INTRA_DIR_ANG, g_aucConvertToBit[pcCU->getSlice()->getSPS()->getMaxCUWidth()>>uiDepth]+2, CHANNEL_TYPE_CHROMA);
 #endif
 
-  m_pcTDecBinIf->decodeBin( uiSymbol, m_cCUChromaPredSCModel.get( 0, 0, 0 ) RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype) );
-  if( uiSymbol == 0 )
+  UInt flag = pcCU->getNnFlag(CHANNEL_TYPE_LUMA, uiAbsPartIdx);
+
+  bool skip = ((flag != 0) && (int(pcCU->getWidth(0)) <= (nnTuSizeChroma * 2)) && tip && true);
+
+  if (!skip)
   {
-    uiSymbol = DM_CHROMA_IDX;
+
+	  m_pcTDecBinIf->decodeBin(uiSymbol, m_cCUChromaPredSCModel.get(0, 0, 0) RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype));
+	  if (uiSymbol == 0)
+	  {
+		  uiSymbol = DM_CHROMA_IDX;
+	  }
+	  else
+	  {
+		  UInt uiIPredMode;
+		  m_pcTDecBinIf->decodeBinsEP(uiIPredMode, 2 RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype));
+		  UInt uiAllowedChromaDir[NUM_CHROMA_MODE];
+		  pcCU->getAllowedChromaDir(uiAbsPartIdx, uiAllowedChromaDir);
+		  uiSymbol = uiAllowedChromaDir[uiIPredMode];
+	  }
+
+
+
+	  pcCU->setIntraDirSubParts(CHANNEL_TYPE_CHROMA, uiSymbol, uiAbsPartIdx, uiDepth);
+
   }
   else
   {
-    UInt uiIPredMode;
-    m_pcTDecBinIf->decodeBinsEP( uiIPredMode, 2 RExt__DECODER_DEBUG_BIT_STATISTICS_PASS_OPT_ARG(ctype) );
-    UInt uiAllowedChromaDir[ NUM_CHROMA_MODE ];
-    pcCU->getAllowedChromaDir( uiAbsPartIdx, uiAllowedChromaDir );
-    uiSymbol = uiAllowedChromaDir[ uiIPredMode ];
+	  pcCU->setIntraDirSubParts(CHANNEL_TYPE_CHROMA, DM_CHROMA_IDX, uiAbsPartIdx, uiDepth);
   }
 
-  pcCU->setIntraDirSubParts( CHANNEL_TYPE_CHROMA, uiSymbol, uiAbsPartIdx, uiDepth );
 }
 
 

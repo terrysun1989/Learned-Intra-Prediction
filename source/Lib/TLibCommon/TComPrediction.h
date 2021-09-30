@@ -73,6 +73,10 @@ private:
 protected:
   Pel*      m_piYuvExt[MAX_NUM_COMPONENT][NUM_PRED_BUF];
   Int       m_iYuvExtSize;
+#if ApplyIntraFCN
+  Pel m_multiRefLines[72 * 72];
+  Int m_multiRefStride;
+#endif
 
   TComYuv   m_acYuvPred[NUM_REF_PIC_LIST_01];
   TComYuv   m_cYuvPredTemp;
@@ -86,6 +90,11 @@ protected:
 
   Void xPredIntraAng            ( Int bitDepth, const Pel* pSrc, Int srcStride, Pel* pDst, Int dstStride, UInt width, UInt height, ChannelType channelType, UInt dirMode, const Bool bEnableEdgeFilters );
   Void xPredIntraPlanar         ( const Pel* pSrc, Int srcStride, Pel* rpDst, Int dstStride, UInt width, UInt height );
+
+#if ApplyIntraFCN
+  void getFurtherRefLine(bool curIsChroma, int lineIndex, Pel* piRoiOrigin, int iPicStride, TComDataCU *pcCU, UInt uiPartIdxLT, Int iTUWidthInUnits, Int iTUHeightInUnits, int iUnitWidth, int iUnitHeight);
+  Void xPredUsingNetwork(TComTU &rTu, Pel* rpDst, Int dstStride, const ComponentID compID);
+#endif
 
   // motion compensation functions
   Void xPredInterUni            ( TComDataCU* pcCU,                          UInt uiPartAddr,               Int iWidth, Int iHeight, RefPicList eRefPicList, TComYuv* pcYuvPred, Bool bi=false          );

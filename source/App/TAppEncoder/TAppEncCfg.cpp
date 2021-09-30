@@ -857,7 +857,7 @@ Bool TAppEncCfg::parseCfg( Int argc, TChar* argv[] )
 
   ("PCMInputBitDepthFlag",                            m_bPCMInputBitDepthFlag,                           true)
   ("PCMFilterDisableFlag",                            m_bPCMFilterDisableFlag,                          false)
-  ("IntraReferenceSmoothing",                         m_enableIntraReferenceSmoothing,                   true, "0: Disable use of intra reference smoothing (not valid in V1 profiles). 1: Enable use of intra reference smoothing (same as V1)")
+  ("IntraReferenceSmoothing",                         m_enableIntraReferenceSmoothing,                  true, "0: Disable use of intra reference smoothing (not valid in V1 profiles). 1: Enable use of intra reference smoothing (same as V1)")
   ("WeightedPredP,-wpP",                              m_useWeightedPred,                                false, "Use weighted prediction in P slices")
   ("WeightedPredB,-wpB",                              m_useWeightedBiPred,                              false, "Use weighted (bidirectional) prediction in B slices")
   ("WeightedPredMethod,-wpM",                         tmpWeightedPredictionMethod, Int(WP_PER_PICTURE_WITH_SIMPLE_DC_COMBINED_COMPONENT), "Weighted prediction method")

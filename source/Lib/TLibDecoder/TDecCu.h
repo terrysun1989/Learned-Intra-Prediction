@@ -61,6 +61,8 @@ private:
   TComYuv**           m_ppcYuvReco;       ///< array of prediction & reconstruction buffer
   TComDataCU**        m_ppcCU;            ///< CU data array
 
+  TComYuv**			  m_ppcOrigYuv;
+
   // access channel
   TComTrQuant*        m_pcTrQuant;
   TComPrediction*     m_pcPrediction;
@@ -98,8 +100,8 @@ protected:
   Void xReconInter              ( TComDataCU* pcCU, UInt uiDepth );
 
   Void xReconIntraQT            ( TComDataCU* pcCU, UInt uiDepth );
-  Void xIntraRecBlk             ( TComYuv* pcRecoYuv, TComYuv* pcPredYuv, TComYuv* pcResiYuv, const ComponentID component, TComTU &rTu );
-  Void xIntraRecQT              ( TComYuv* pcRecoYuv, TComYuv* pcPredYuv, TComYuv* pcResiYuv, const ChannelType chType, TComTU &rTu );
+  Void xIntraRecBlk             ( TComYuv* pcRecoYuv, TComYuv* pcPredYuv, TComYuv* pcResiYuv, const ComponentID component, TComTU &rTu, TComYuv* pcOrgYuv );
+  Void xIntraRecQT              ( TComYuv* pcRecoYuv, TComYuv* pcPredYuv, TComYuv* pcResiYuv, const ChannelType chType, TComTU &rTu, TComYuv* pcOrgYuv );
 
   Void xReconPCM                ( TComDataCU* pcCU, UInt uiDepth );
 

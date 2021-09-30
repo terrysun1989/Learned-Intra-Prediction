@@ -46,6 +46,11 @@
 #include "../TLibCommon/Debug.h"
 #endif
 
+int tttmode[32400] = { 0 };
+int globalModeIdx = 0;
+
+extern bool checkbit;
+bool nnEncodePredFlag = false; // real encode after compression
 
 //! \ingroup TLibEncoder
 //! \{
@@ -66,6 +71,18 @@ TEncSbac::TEncSbac()
 , m_cCUPartSizeSCModel                 ( 1,             1,                      NUM_PART_SIZE_CTX                    , m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUPredModeSCModel                 ( 1,             1,                      NUM_PRED_MODE_CTX                    , m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUIntraPredSCModel                ( 1,             1,                      NUM_INTRA_PREDICT_CTX                , m_contextModels + m_numContextModels, m_numContextModels)
+#if ApplyIntraFCN
+, m_cCUIsNetworkModeSCModel(1, 1, NUM_IsNewworkMode_CTX, m_contextModels + m_numContextModels, m_numContextModels)
+#endif
+, m_cCUIntraNnModel					   ( 1,             1,                      1                                    , m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModel8(1, 1, 1, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModel16(1, 1, 1, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModel32(1, 1, 1, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModel64(1, 1, 1, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModelIdx (1, 1, 1, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModelIdx2(1, 1, 1, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModelIdx3(1, 1, 1, m_contextModels + m_numContextModels, m_numContextModels)
+, m_cCUIntraNnModelIdx4(1, 1, 1, m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUChromaPredSCModel               ( 1,             1,                      NUM_CHROMA_PRED_CTX                  , m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUDeltaQpSCModel                  ( 1,             1,                      NUM_DELTA_QP_CTX                     , m_contextModels + m_numContextModels, m_numContextModels)
 , m_cCUInterDirSCModel                 ( 1,             1,                      NUM_INTER_DIR_CTX                    , m_contextModels + m_numContextModels, m_numContextModels)
@@ -120,6 +137,18 @@ Void TEncSbac::resetEntropy           (const TComSlice *pSlice)
   m_cCUPartSizeSCModel.initBuffer                 ( eSliceType, iQp, (UChar*)INIT_PART_SIZE );
   m_cCUPredModeSCModel.initBuffer                 ( eSliceType, iQp, (UChar*)INIT_PRED_MODE );
   m_cCUIntraPredSCModel.initBuffer                ( eSliceType, iQp, (UChar*)INIT_INTRA_PRED_MODE );
+#if ApplyIntraFCN
+  m_cCUIsNetworkModeSCModel.initBuffer(eSliceType, iQp, (UChar*)INIT_IsNetworkMode_MODE);
+#endif
+  m_cCUIntraNnModel.initBuffer                    ( eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModel8.initBuffer(eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModel16.initBuffer(eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModel32.initBuffer(eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModel64.initBuffer(eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModelIdx.initBuffer(eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModelIdx2.initBuffer(eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModelIdx3.initBuffer(eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
+  m_cCUIntraNnModelIdx4.initBuffer(eSliceType, iQp, (UChar*)INIT_INTRA_NN_MODE);
   m_cCUChromaPredSCModel.initBuffer               ( eSliceType, iQp, (UChar*)INIT_CHROMA_PRED_MODE );
   m_cCUInterDirSCModel.initBuffer                 ( eSliceType, iQp, (UChar*)INIT_INTER_DIR );
   m_cCUMvdSCModel.initBuffer                      ( eSliceType, iQp, (UChar*)INIT_MVD );
@@ -181,6 +210,18 @@ SliceType TEncSbac::determineCabacInitIdx(const TComSlice *pSlice)
       curCost += m_cCUPartSizeSCModel.calcCost                 ( curSliceType, qp, (UChar*)INIT_PART_SIZE );
       curCost += m_cCUPredModeSCModel.calcCost                 ( curSliceType, qp, (UChar*)INIT_PRED_MODE );
       curCost += m_cCUIntraPredSCModel.calcCost                ( curSliceType, qp, (UChar*)INIT_INTRA_PRED_MODE );
+#if ApplyIntraFCN
+	  curCost += m_cCUIsNetworkModeSCModel.calcCost(curSliceType, qp, (UChar*)INIT_IsNetworkMode_MODE);
+#endif
+	  curCost += m_cCUIntraNnModel.calcCost                    ( curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+	  curCost += m_cCUIntraNnModel8.calcCost(curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+	  curCost += m_cCUIntraNnModel16.calcCost(curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+	  curCost += m_cCUIntraNnModel32.calcCost(curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+	  curCost += m_cCUIntraNnModel64.calcCost(curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+	  curCost += m_cCUIntraNnModelIdx.calcCost(curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+	  curCost += m_cCUIntraNnModelIdx2.calcCost(curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+	  curCost += m_cCUIntraNnModelIdx3.calcCost(curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
+	  curCost += m_cCUIntraNnModelIdx4.calcCost(curSliceType, qp, (UChar*)INIT_INTRA_NN_MODE);
       curCost += m_cCUChromaPredSCModel.calcCost               ( curSliceType, qp, (UChar*)INIT_CHROMA_PRED_MODE );
       curCost += m_cCUInterDirSCModel.calcCost                 ( curSliceType, qp, (UChar*)INIT_INTER_DIR );
       curCost += m_cCUMvdSCModel.calcCost                      ( curSliceType, qp, (UChar*)INIT_MVD );
@@ -404,6 +445,9 @@ Void  TEncSbac::loadIntraDirMode( const TEncSbac* pSrc, const ChannelType chType
   if (isLuma(chType))
   {
     this->m_cCUIntraPredSCModel      .copyFrom( &pSrc->m_cCUIntraPredSCModel       );
+#if ApplyIntraFCN
+	this->m_cCUIsNetworkModeSCModel.copyFrom(&pSrc->m_cCUIsNetworkModeSCModel);
+#endif
   }
   else
   {
@@ -642,56 +686,109 @@ Void TEncSbac::codeTransformSubdivFlag( UInt uiSymbol, UInt uiCtx )
 
 Void TEncSbac::codeIntraDirLumaAng( TComDataCU* pcCU, UInt absPartIdx, Bool isMultiple)
 {
+	int localUseNnFlag = false;
+
   UInt dir[4],j;
   Int preds[4][NUM_MOST_PROBABLE_MODES] = {{-1, -1, -1},{-1, -1, -1},{-1, -1, -1},{-1, -1, -1}};
   Int predIdx[4] ={ -1,-1,-1,-1};
   PartSize mode = pcCU->getPartitionSize( absPartIdx );
   UInt partNum = isMultiple?(mode==SIZE_NxN?4:1):1;
   UInt partOffset = ( pcCU->getPic()->getNumPartitionsInCtu() >> ( pcCU->getDepth(absPartIdx) << 1 ) ) >> 2;
-  for (j=0;j<partNum;j++)
+
+#if ApplyIntraFCN && UseApplyIntraFCN
+  Int Topx = pcCU->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[absPartIdx]];
+  Int Topy = pcCU->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[absPartIdx]];
+  if (Topx > 0 && Topy > 0 && pcCU->getDepth(absPartIdx) > 0)
   {
-    dir[j] = pcCU->getIntraDir( CHANNEL_TYPE_LUMA, absPartIdx+partOffset*j );
-    pcCU->getIntraDirPredictor(absPartIdx+partOffset*j, preds[j], COMPONENT_Y);
-    for(UInt i = 0; i < NUM_MOST_PROBABLE_MODES; i++)
-    {
-      if(dir[j] == preds[j][i])
-      {
-        predIdx[j] = i;
-      }
-    }
-    m_pcBinIf->encodeBin((predIdx[j] != -1)? 1 : 0, m_cCUIntraPredSCModel.get( 0, 0, 0 ) );
+	  if (pcCU->getIsNetworkFlag(absPartIdx))
+	  {
+		  m_pcBinIf->encodeBin(1, m_cCUIsNetworkModeSCModel.get(0, 0, 0));
+		  return;
+}
+	  else
+	  {
+		  m_pcBinIf->encodeBin(0, m_cCUIsNetworkModeSCModel.get(0, 0, 0));
+	  }
   }
-  for (j=0;j<partNum;j++)
+#endif
+
+  int flag[4] = { 0 };
+  int flag_minus_mpm[4] = { 0 };
+
+  int size = int(pcCU->getWidth(0));
+
+  Int Topx = pcCU->getCUPelX() + g_auiRasterToPelX[g_auiZscanToRaster[absPartIdx]];
+  Int Topy = pcCU->getCUPelY() + g_auiRasterToPelY[g_auiZscanToRaster[absPartIdx]];
+
+  int cu_x = pcCU->getCUPelX();
+  int cu_y = pcCU->getCUPelY();
+
+  int uiWidth = int(pcCU->getWidth(absPartIdx) ) ;
+
+  Int RightBottom_x = Topx + uiWidth;
+  Int RightBottom_y = Topy + uiWidth;
+  const TComSPS       &sps = *(pcCU->getSlice()->getSPS());
+
+  bool xInside = (RightBottom_x + uiWidth) <= sps.getPicWidthInLumaSamples();
+  bool yInside = (RightBottom_y + uiWidth) <= sps.getPicHeightInLumaSamples();
+
+  for (j = 0; j < partNum; j++)
   {
-    if(predIdx[j] != -1)
-    {
-      m_pcBinIf->encodeBinEP( predIdx[j] ? 1 : 0 );
-      if (predIdx[j])
-      {
-        m_pcBinIf->encodeBinEP( predIdx[j]-1 );
-      }
-    }
-    else
-    {
-      if (preds[j][0] > preds[j][1])
-      {
-        std::swap(preds[j][0], preds[j][1]);
-      }
-      if (preds[j][0] > preds[j][2])
-      {
-        std::swap(preds[j][0], preds[j][2]);
-      }
-      if (preds[j][1] > preds[j][2])
-      {
-        std::swap(preds[j][1], preds[j][2]);
-      }
-      for(Int i = (Int(NUM_MOST_PROBABLE_MODES) - 1); i >= 0; i--)
-      {
-        dir[j] = dir[j] > preds[j][i] ? dir[j] - 1 : dir[j];
-      }
-      m_pcBinIf->encodeBinsEP( dir[j], 5 );
-    }
+	  if ( 1 )
+	  {
+		  dir[j] = pcCU->getIntraDir(CHANNEL_TYPE_LUMA, absPartIdx + partOffset * j);
+
+		  pcCU->getIntraDirPredictor(absPartIdx + partOffset * j, preds[j], COMPONENT_Y);
+		  {
+			  //m_pcBinIf->encodeBinEP(0);
+			  for (UInt i = 0; i < NUM_MOST_PROBABLE_MODES; i++)
+			  {
+				  if (dir[j] == preds[j][i])
+				  {
+					  predIdx[j] = i;
+				  }
+			  }
+			  m_pcBinIf->encodeBin((predIdx[j] != -1) ? 1 : 0, m_cCUIntraPredSCModel.get(0, 0, 0));
+		  }
+
+	  }
   }
+
+	for (j = 0; j < partNum; j++)
+	{
+	 if ( 1 )
+	 {
+	  if ((predIdx[j] != -1) /* || (tttmode[tttmodeIdx]==1) */)
+	  {
+		  m_pcBinIf->encodeBinEP(predIdx[j] ? 1 : 0);
+		  if (predIdx[j])
+		  {
+			  m_pcBinIf->encodeBinEP(predIdx[j] - 1);
+		  }
+	  }
+	  else
+	  {
+		  if (preds[j][0] > preds[j][1])
+		  {
+			  std::swap(preds[j][0], preds[j][1]);
+		  }
+		  if (preds[j][0] > preds[j][2])
+		  {
+			  std::swap(preds[j][0], preds[j][2]);
+		  }
+		  if (preds[j][1] > preds[j][2])
+		  {
+			  std::swap(preds[j][1], preds[j][2]);
+		  }
+		  for (Int i = (Int(NUM_MOST_PROBABLE_MODES) - 1); i >= 0; i--)
+		  {
+			  dir[j] = dir[j] > preds[j][i] ? dir[j] - 1 : dir[j];
+		  }
+		  m_pcBinIf->encodeBinsEP(dir[j], 5);
+	  }
+	 }
+	}
+
   return;
 }
 
@@ -699,28 +796,57 @@ Void TEncSbac::codeIntraDirChroma( TComDataCU* pcCU, UInt uiAbsPartIdx )
 {
   UInt uiIntraDirChroma = pcCU->getIntraDir( CHANNEL_TYPE_CHROMA, uiAbsPartIdx );
 
-  if( uiIntraDirChroma == DM_CHROMA_IDX )
+#if ApplyIntraFCN && UseApplyIntraFCN
+  Bool isNetworkModeLuma = pcCU->getIsNetworkFlag(uiAbsPartIdx);
+  if (isNetworkModeLuma)
   {
-    m_pcBinIf->encodeBin( 0, m_cCUChromaPredSCModel.get( 0, 0, 0 ) );
+	  return;
+  }
+#endif
+
+  UInt flag = pcCU->getNnFlag(CHANNEL_TYPE_LUMA, uiAbsPartIdx); // checked 
+
+  if (nnEncodePredFlag)
+  {
+	  if ((flag!=0) && (uiIntraDirChroma != DM_CHROMA_IDX) )
+	  {
+		  //check0330 << flag << " " << uiIntraDirChroma << endl;
+	  }
+  }
+
+
+  if (  (flag!=0) && ( int(pcCU->getWidth(uiAbsPartIdx)) <= (nnTuSizeChroma*2)) && (int(pcCU->getWidth(uiAbsPartIdx)) >= (nnTuSizeChromaMin * 2)) && tip )
+  {
+	  //m_pcBinIf->encodeBinEP(flag);
   }
   else
   {
-    m_pcBinIf->encodeBin( 1, m_cCUChromaPredSCModel.get( 0, 0, 0 ) );
+	  //m_pcBinIf->encodeBinEP(flag);
 
-    UInt uiAllowedChromaDir[ NUM_CHROMA_MODE ];
-    pcCU->getAllowedChromaDir( uiAbsPartIdx, uiAllowedChromaDir );
+	  if (uiIntraDirChroma == DM_CHROMA_IDX)
+	  {
+		  m_pcBinIf->encodeBin(0, m_cCUChromaPredSCModel.get(0, 0, 0));
+	  }
+	  else
+	  {
+		  m_pcBinIf->encodeBin(1, m_cCUChromaPredSCModel.get(0, 0, 0));
 
-    for( Int i = 0; i < NUM_CHROMA_MODE - 1; i++ )
-    {
-      if( uiIntraDirChroma == uiAllowedChromaDir[i] )
-      {
-        uiIntraDirChroma = i;
-        break;
-      }
-    }
+		  UInt uiAllowedChromaDir[NUM_CHROMA_MODE];
+		  pcCU->getAllowedChromaDir(uiAbsPartIdx, uiAllowedChromaDir);
 
-    m_pcBinIf->encodeBinsEP( uiIntraDirChroma, 2 );
+		  for (Int i = 0; i < NUM_CHROMA_MODE - 1; i++)
+		  {
+			  if (uiIntraDirChroma == uiAllowedChromaDir[i])
+			  {
+				  uiIntraDirChroma = i;
+				  break;
+			  }
+		  }
+
+		  m_pcBinIf->encodeBinsEP(uiIntraDirChroma, 2);
+	  }
   }
+
 
   return;
 }

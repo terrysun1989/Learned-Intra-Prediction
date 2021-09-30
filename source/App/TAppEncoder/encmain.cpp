@@ -1,4 +1,4 @@
-/* The copyright in this software is being made available under the BSD
+﻿/* The copyright in this software is being made available under the BSD
  * License, included below. This software may be subject to other third party
  * and contributor rights, including patent rights, and no such rights are
  * granted under this license.
@@ -40,16 +40,19 @@
 #include "TAppEncTop.h"
 #include "TAppCommon/program_options_lite.h"
 
-ofstream encodeTime("encodeTime.txt", ios::app);
+#include "TLibCommon/TComTensorflow.h"
 
 //! \ingroup TAppEncoder
 //! \{
 
 #include "../Lib/TLibCommon/Debug.h"
 
-// ====================================================================================================================
-// Main function
-// ====================================================================================================================
+//#include <Python.h>
+#include<fstream>
+#include<string>
+using namespace std;
+
+ofstream encodeTime("encodeTime.txt",ios::app);
 
 int main(int argc, char* argv[])
 {
@@ -94,16 +97,31 @@ int main(int argc, char* argv[])
 
   // starting time
   Double dResult;
+  Double dResult1;
   clock_t lBefore = clock();
+
+  clock_t lBefore1 = clock();
+
+  NNPredict predict;
+  predict.new_session();
+
+  clock_t lAfter1 = clock();
 
   // call encoding function
   cTAppEncTop.encode();
+
+  //close_session();
+  
 
   // ending time
   dResult = (Double)(clock()-lBefore) / CLOCKS_PER_SEC;
   printf("\n Total Time: %12.3f sec.\n", dResult);
 
-  encodeTime << dResult << endl;
+  dResult1 = (Double)(lAfter1 - lBefore1) / CLOCKS_PER_SEC;
+  printf("\n Load Time: %12.3f sec.\n", dResult1);
+
+  encodeTime << (dResult - dResult1) << endl;
+  
 
   // destroy application encoder class
   cTAppEncTop.destroy();
