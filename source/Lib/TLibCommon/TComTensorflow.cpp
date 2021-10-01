@@ -22,7 +22,7 @@ int NNPredict::load_pb()
 #if LINUX
 string BaseAdd = "/home/sun/hevc_cnn/models/";
 #else
-string BaseAdd = "D:/hevc_cnn/models/";
+string BaseAdd = "models/";
 
 #endif
 	
